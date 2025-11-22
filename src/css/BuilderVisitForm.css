@@ -235,6 +235,12 @@ form textarea:focus {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   /* gap: 8px 16px;  */
 }
+.card-section2 {
+  margin-bottom: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px 16px;
+}
 
 .card-section p {
   font-size: 0.9rem;
@@ -301,6 +307,7 @@ form textarea:focus {
   -webkit-appearance: radio; /* Safari ke liye */
   accent-color: #8c1843; /* optional color change */
 }
+
 @media only screen and (max-width: 480px) {
   .radio-group label {
     font-size: 14px;

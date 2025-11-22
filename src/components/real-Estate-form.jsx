@@ -23,17 +23,17 @@ const BuilderVisitForm = () => {
         maintenance: "",
         aecAuda: "",
         floor: "",
-        marketValue: "",
+        boxPrice: "",
       },
     ],
     floor: "",
     sqft: "",
     aecAuda: "",
-    selldedAmount: "",
     regularPrice: "",
     downPayment: "",
     maintenance: "",
     developmentType: "",
+    negotiable: "",
     totalUnitsBlocks: "",
     propertySize: "",
     expectedCompletionDate: "",
@@ -41,9 +41,8 @@ const BuilderVisitForm = () => {
     financingDetails: "",
     residentType: "",
     avgAgreementValue: "",
-    marketValue: "",
+    boxPrice: "",
     nearbyProjects: "",
-    surroundingCommunity: "",
     enquiryType: "",
     unitsForSale: "",
     timeLimitMonths: "",
@@ -107,7 +106,7 @@ const BuilderVisitForm = () => {
           aecAuda: "",
           selldedAmount: "",
           regularPrice: "",
-          marketValue: "",
+          boxPrice: "",
           downPayment: "",
           maintenance: "",
         },
@@ -130,23 +129,15 @@ const BuilderVisitForm = () => {
       ...p,
       type:
         p.type ||
-        (app.developmentType === "Both"
+        (app.developmentType === "Residential + Commercial"
           ? p.floor
             ? "Commercial"
             : "Residential"
           : app.developmentType),
       // 🪄 Format commas where needed
-      selldedAmount: p.selldedAmount
-        ? Number(p.selldedAmount).toLocaleString("en-IN")
-        : "",
-      marketValue: p.marketValue
-        ? Number(p.marketValue).toLocaleString("en-IN")
-        : "",
+      boxPrice: p.boxPrice ? Number(p.boxPrice).toLocaleString("en-IN") : "",
       downPayment: p.downPayment
         ? Number(p.downPayment).toLocaleString("en-IN")
-        : "",
-      maintenance: p.maintenance
-        ? Number(p.maintenance).toLocaleString("en-IN")
         : "",
     }));
 
@@ -156,31 +147,29 @@ const BuilderVisitForm = () => {
       avgAgreementValue: app.avgAgreementValue
         ? Number(app.avgAgreementValue).toLocaleString("en-IN")
         : "",
-      marketValue: app.marketValue
-        ? Number(app.marketValue).toLocaleString("en-IN")
+      boxPrice: app.boxPrice
+        ? Number(app.boxPrice).toLocaleString("en-IN")
         : "",
     });
 
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
-
   // --- FORM SUBMIT / UPDATE ---
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       const cleanPropertySizes = formData.propertySizes.map((p) => ({
         ...p,
-        selldedAmount: (p.selldedAmount || "").replace(/,/g, ""),
         regularPrice: (p.regularPrice || "").replace(/,/g, ""),
         downPayment: (p.downPayment || "").replace(/,/g, ""),
         maintenance: (p.maintenance || "").replace(/,/g, ""),
-        marketValue: (p.marketValue || "").replace(/,/g, ""),
+        boxPrice: (p.boxPrice || "").replace(/,/g, ""),
       }));
 
       const cleanData = {
         ...formData,
         avgAgreementValue: (formData.avgAgreementValue || "").replace(/,/g, ""),
-        marketValue: (formData.marketValue || "").replace(/,/g, ""),
+        boxPrice: (formData.boxPrice || "").replace(/,/g, ""),
         propertySizes: cleanPropertySizes,
       };
 
@@ -318,7 +307,7 @@ const BuilderVisitForm = () => {
           </label>
 
           <label>
-            Location:
+            Location/Address:
             <input
               type="text"
               placeholder="Enter Location"
@@ -341,18 +330,20 @@ const BuilderVisitForm = () => {
           {/* -------------------- DEVELOPMENT TYPE -------------------- */}
           <div className="radio-group full-width">
             <p className="radio-label">Type of Development:</p>
-            {["Residential", "Commercial", "Both"].map((type) => (
-              <label key={type}>
-                <input
-                  type="radio"
-                  name="developmentType"
-                  value={type}
-                  checked={formData.developmentType === type}
-                  onChange={handleChange}
-                />
-                {type}
-              </label>
-            ))}
+            {["Residential", "Commercial", "Residential + Commercial"].map(
+              (type) => (
+                <label key={type}>
+                  <input
+                    type="radio"
+                    name="developmentType"
+                    value={type}
+                    checked={formData.developmentType === type}
+                    onChange={handleChange}
+                  />
+                  {type}
+                </label>
+              )
+            )}
           </div>
 
           {/* -------------------- PROPERTY SECTION (SHARED TEMPLATE) -------------------- */}
@@ -360,7 +351,7 @@ const BuilderVisitForm = () => {
             .filter(
               (type) =>
                 formData.developmentType === type ||
-                formData.developmentType === "Both"
+                formData.developmentType === "Residential + Commercial"
             )
             .map((type) => (
               <div key={type} className="property-section">
@@ -375,7 +366,7 @@ const BuilderVisitForm = () => {
                   return (
                     <div key={index} className="conditional-fields">
                       <h4>
-                        {type} Property {index + 1}
+                        {type} Property Type {index + 1}
                       </h4>
 
                       {/* Unique field per type */}
@@ -388,9 +379,13 @@ const BuilderVisitForm = () => {
                             onChange={(e) => handlePropertyChange(index, e)}
                           >
                             <option value="">Select</option>
-                            <option>3BHK</option>
-                            <option>4BHK</option>
-                            <option>5BHK</option>
+                            <option>2 BHK</option>
+                            <option>3 BHK</option>
+                            <option>3 BHK (PentHouse)</option>
+                            <option>4 BHK</option>
+                            <option>4 BHK (PentHouse)</option>
+                            <option>5 BHK</option>
+                            <option>5 BHK (PentHouse)</option>
                           </select>
                         </label>
                       ) : (
@@ -404,6 +399,7 @@ const BuilderVisitForm = () => {
                             <option value="">Select</option>
                             <option>Ground Floor</option>
                             <option>1st Floor</option>
+                            <option>2nd Floor</option>
                             <option>Office</option>
                           </select>
                         </label>
@@ -411,10 +407,10 @@ const BuilderVisitForm = () => {
                       {[
                         ["sqft", "SQ.FT/YD"],
                         ["aecAuda", "AEC / AUDA"],
-                        ["selldedAmount", "Sale-Deed Amount"],
-                        ["marketValue", "Market Value"],
-                        ["downPayment", "Down Payment"],
                         ["maintenance", "Maintenance"],
+                        ["selldedAmount", "SaleDeed Amount"],
+                        ["boxPrice", "Box Price"],
+                        ["downPayment", "Down Payment"],
                       ].map(([name, label]) => (
                         <label key={name}>
                           {label}:
@@ -427,14 +423,7 @@ const BuilderVisitForm = () => {
                               let value = e.target.value;
 
                               // ✅ only apply comma formatting to selected fields
-                              if (
-                                [
-                                  "selldedAmount",
-                                  "marketValue",
-                                  "downPayment",
-                                  "maintenance",
-                                ].includes(name)
-                              ) {
+                              if (["boxPrice", "downPayment"].includes(name)) {
                                 value = value.replace(/,/g, ""); // remove commas first
                                 if (!isNaN(value) && value !== "") {
                                   const formattedValue =
@@ -458,7 +447,7 @@ const BuilderVisitForm = () => {
                         </label>
                       ))}
 
-                      {formData.propertySizes.length > 1 && (
+                      {/* {formData.propertySizes.length > 1 && (
                         <button
                           type="button"
                           className="property-btn remove-btn"
@@ -466,7 +455,7 @@ const BuilderVisitForm = () => {
                         >
                           Remove
                         </button>
-                      )}
+                      )} */}
                     </div>
                   );
                 })}
@@ -480,7 +469,29 @@ const BuilderVisitForm = () => {
                 </button>
               </div>
             ))}
-
+          <div className="radio-group full-width">
+            <p className="radio-label"> Price Negotiable:</p>
+            <label>
+              <input
+                type="radio"
+                name="negotiable"
+                value="Yes"
+                checked={formData.negotiable === "Yes"}
+                onChange={handleChange}
+              />
+              Yes
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="negotiable"
+                value="No"
+                checked={formData.negotiable === "No"}
+                onChange={handleChange}
+              />
+              No
+            </label>
+          </div>
           <label>
             Total Units & Blocks:
             <input
@@ -502,7 +513,8 @@ const BuilderVisitForm = () => {
               onChange={handleChange}
             />
           </label>
-          {formData.developmentType === "Residential" && (
+          {(formData.developmentType === "Residential" ||
+            formData.developmentType === "Residential + Commercial") && (
             <label className="full-width">
               Gentry:
               <input
@@ -514,18 +526,19 @@ const BuilderVisitForm = () => {
               />
             </label>
           )}
+
           <label>
-            Expected Completion Date:
+            Expected Completion Month:
             <input
-              type="date"
+              type="month"
               name="expectedCompletionDate"
-              value={formatDate(formData.expectedCompletionDate)}
+              value={formData.expectedCompletionDate}
               onChange={handleChange}
             />
           </label>
 
           <div className="radio-group full-width">
-            <p className="radio-label">Financing Requirements:</p>
+            <p className="radio-label">Project Loan Awail :</p>
             <label>
               <input
                 type="radio"
@@ -547,51 +560,8 @@ const BuilderVisitForm = () => {
               No
             </label>
           </div>
-
-          <label>
-            Avg Agreement Value:
-            <input
-              type="text"
-              name="avgAgreementValue"
-              placeholder="Enter Avg Agreement Value"
-              value={formData.avgAgreementValue}
-              onChange={(e) => {
-                let value = e.target.value.replace(/,/g, ""); // remove existing commas
-                if (!isNaN(value) && value !== "") {
-                  // Indian number formatting
-                  const formattedValue = Number(value).toLocaleString("en-IN");
-                  setFormData({
-                    ...formData,
-                    avgAgreementValue: formattedValue,
-                  });
-                } else if (value === "") {
-                  setFormData({ ...formData, avgAgreementValue: "" });
-                }
-              }}
-            />
-          </label>
-
-          <label>
-            Market Value:
-            <input
-              type="text"
-              name="marketValue"
-              placeholder="Enter MKT Value"
-              value={formData.marketValue}
-              onChange={(e) => {
-                let value = e.target.value.replace(/,/g, ""); // remove commas
-                if (!isNaN(value) && value !== "") {
-                  const formattedValue = Number(value).toLocaleString("en-IN");
-                  setFormData({ ...formData, marketValue: formattedValue });
-                } else if (value === "") {
-                  setFormData({ ...formData, marketValue: "" });
-                }
-              }}
-            />
-          </label>
-
           <label className="full-width">
-            Nearby Other Projects:
+            Nearby Similar Projects:
             <textarea
               placeholder="Enter Nearby Other Projects"
               name="nearbyProjects"
@@ -618,7 +588,7 @@ const BuilderVisitForm = () => {
             Units Allocated for Sale
             <input
               placeholder="Enter Units to be sold by us"
-              type="number"
+              type="string"
               name="unitsForSale"
               value={formData.unitsForSale}
               onChange={handleChange}
@@ -626,7 +596,7 @@ const BuilderVisitForm = () => {
           </label>
 
           <label>
-            Time Limit for Sale (Months):
+            Time Limit for Sale Months (Group Project):
             <input
               placeholder="Enter Time Limit for Sale (Months)"
               type="number"
@@ -646,7 +616,7 @@ const BuilderVisitForm = () => {
             />
           </label>
           <label className="full-width">
-            Payout (in % or Amount):
+            Payout (Group Project):
             <input
               type="text"
               name="payout"
@@ -693,28 +663,31 @@ const BuilderVisitForm = () => {
                 </p>
                 {v.developmentType === "Residential" && <p>Size : {p.size}</p>}
                 {v.developmentType === "Commercial" && <p>Floor : {p.floor}</p>}
-                {v.developmentType === "Both" && (
+                {v.developmentType === "Residential + Commercial" && (
                   <>
                     {p.size && <p>Size : {p.size}</p>}
                     {p.floor && <p>Floor : {p.floor}</p>}
                   </>
                 )}
                 <p>SQ.FT/Yard : {p.sqft}</p>
-                <p>Market value : {formatIndian(p.marketValue)}</p>
-                <p>Sellded Amount : {formatIndian(p.selldedAmount)}</p>
+                <p>Box Price : {formatIndian(p.boxPrice)}</p>
+                <p>Approximate SaleDeed Amount : {p.selldedAmount}</p>
                 {/* stamp duty here add */}
                 <p>AEC / AUDA : {p.aecAuda}</p>
-                <p>Maintenance : {formatIndian(p.maintenance)}</p>
+                <p>Maintenance : {p.maintenance}</p>
                 <p>Down Payment : {formatIndian(p.downPayment)}</p>
               </div>
             ))}
           </div>
-          <div className="card-section">
+          <div className="card-section2">
             <p>
-              <strong>Financing Required:</strong> {v.financingRequirements}
+              <strong>Project Loan Awail:</strong> {v.financingRequirements}
             </p>
             <p>
-              <strong>Payout:</strong> {v.payout}
+              <strong>Gentry:</strong> {v.gentry}
+            </p>
+            <p>
+              <strong>Payout(Group Project):</strong> {v.payout}
             </p>
             <p>
               <strong>Total Units / Blocks:</strong> {v.totalUnitsBlocks}
@@ -724,13 +697,26 @@ const BuilderVisitForm = () => {
             </p>
             <p>
               <strong>Completion Date:</strong>{" "}
-              {new Date(v.expectedCompletionDate).toLocaleDateString()}
+              {v.expectedCompletionDate
+                ? new Date(v.expectedCompletionDate + "-01").toLocaleDateString(
+                    "en-GB",
+                    {
+                      month: "long",
+                      year: "numeric",
+                    }
+                  )
+                : ""}
             </p>
+
             <p>
               <strong>Units for Sale: </strong> {v.unitsForSale}
             </p>
             <p>
               <strong>Time Limit for Sale (Months):</strong> {v.timeLimitMonths}
+            </p>
+            <p>
+              <strong>Remark:</strong>
+              {v.remark}
             </p>
           </div>
           <p style={{ fontSize: "20px" }}>
