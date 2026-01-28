@@ -645,7 +645,7 @@ const BuilderVisitForm = () => {
             <p>
               <strong>Builder:</strong> {v.builderName}
             </p>
-            <p>
+            <p style={{backgroundColor:"yellow"}}>
               <strong>Group:</strong> {v.groupName}
             </p>
             <p>
@@ -661,16 +661,16 @@ const BuilderVisitForm = () => {
                 <p>
                   <strong>Property {i + 1}</strong>
                 </p>
-                {v.developmentType === "Residential" && <p>Size : {p.size}</p>}
-                {v.developmentType === "Commercial" && <p>Floor : {p.floor}</p>}
+                {v.developmentType === "Residential" && <p style={{backgroundColor:"yellow"}}>Size : {p.size}</p>}
+                {v.developmentType === "Commercial" && <p style={{backgroundColor:"yellow"}}>Floor : {p.floor}</p>}
                 {v.developmentType === "Residential + Commercial" && (
                   <>
-                    {p.size && <p>Size : {p.size}</p>}
-                    {p.floor && <p>Floor : {p.floor}</p>}
+                    {p.size && <p style={{backgroundColor:"yellow"}}>Size : {p.size}</p>}
+                    {p.floor && <p style={{backgroundColor:"yellow"}}>Floor : {p.floor}</p>}
                   </>
                 )}
-                <p>SQ.FT/Yard : {p.sqft}</p>
-                <p>Box Price : {formatIndian(p.boxPrice)}</p>
+                <p style={{backgroundColor:"yellow"}}>SQ.FT/Yard : {p.sqft}</p>
+                <p style={{backgroundColor:"yellow"}}>Box Price : {formatIndian(p.boxPrice)}</p>
                 <p>Approximate SaleDeed Amount : {p.selldedAmount}</p>
                 {/* stamp duty here add */}
                 <p>AEC / AUDA : {p.aecAuda}</p>
@@ -686,7 +686,7 @@ const BuilderVisitForm = () => {
             <p>
               <strong>Gentry:</strong> {v.gentry}
             </p>
-            <p>
+            <p style={{backgroundColor:"yellow"}}>
               <strong>Payout(Group Project):</strong> {v.payout}
             </p>
             <p>
@@ -714,7 +714,7 @@ const BuilderVisitForm = () => {
             <p>
               <strong>Time Limit for Sale (Months):</strong> {v.timeLimitMonths}
             </p>
-            <p>
+            <p style={{backgroundColor:"yellow"}}>
               <strong>Remark:</strong>
               {v.remark}
             </p>

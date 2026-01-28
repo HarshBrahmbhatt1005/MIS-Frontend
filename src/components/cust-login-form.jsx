@@ -26,6 +26,9 @@ const CustForm = () => {
     disbursedAmount: "",
     insuranceOption: "",
     insuranceAmount: "",
+    subventionOption: "",
+    subventionAmount: "",
+
     sales: "",
     ref: "",
     sourceChannel: "",
@@ -45,6 +48,7 @@ const CustForm = () => {
     otherCategory: "",
     auditData: "",
     consulting: "",
+    reloginReason: "",
   };
 
   const safeFormatDate = (value) => {
@@ -82,7 +86,7 @@ const CustForm = () => {
     "feesRefundAmount",
     "expenceAmount",
     "consulting",
-    "ProcessingFees",
+    "processingFees",
     "payout",
     "status",
   ];
@@ -101,8 +105,21 @@ const CustForm = () => {
   // Utility to reverse (DD-MM-YYYY → YYYY-MM-DD) for input fields
   const parseIndianDate = (str) => {
     if (!str) return "";
-    const [day, month, year] = str.split("-");
-    return `${year}-${month}-${day}`;
+    // If already in ISO format YYYY-MM-DD, return as-is
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+
+    // If in DD-MM-YYYY convert to YYYY-MM-DD
+    if (/^\d{2}-\d{2}-\d{4}$/.test(str)) {
+      const [day, month, year] = str.split("-");
+      return `${year}-${month}-${day}`;
+    }
+
+    // Fallback: try Date parsing and return ISO date part
+    const d = new Date(str);
+    if (!isNaN(d)) return d.toISOString().split("T")[0];
+
+    // Unknown format, return original
+    return str;
   };
   const formatIndianNumber = (numStr) => {
     if (!numStr) return "";
@@ -130,7 +147,10 @@ const CustForm = () => {
         "disbursedAmount",
         "insuranceOption",
         "insuranceAmount",
+        "subventionOption",
+        "subventionAmount",
         "partDisbursed",
+        "reloginReason",
       ];
       return !alwaysEditable.includes(fieldName); // all others disabled
     }
@@ -207,7 +227,10 @@ const CustForm = () => {
       "disbursedAmount",
       "insuranceOption",
       "insuranceAmount",
+      "subventionOption",
+      "subventionAmount",
       "partDisbursed", // ✅ important
+      "reloginReason",
     ];
 
     if (isApprovedLock && !alwaysEditable.includes(name)) return;
@@ -218,6 +241,8 @@ const CustForm = () => {
       "sanctionAmount",
       "disbursedAmount",
       "insuranceAmount",
+
+      "mktValue",
     ];
 
     // ✅ Handle amount fields
@@ -323,10 +348,16 @@ const CustForm = () => {
         formData.category === "Other" && formData.otherCategory
           ? formData.otherCategory
           : formData.category,
+      // normalize dates to ISO YYYY-MM-DD for backend
       loginDate: parseIndianDate(formData.loginDate),
       sanctionDate: parseIndianDate(formData.sanctionDate),
       disbursedDate: parseIndianDate(formData.disbursedDate),
+      // ensure reloginReason is only sent when status is Re-Login
+      reloginReason: formData.status === "Re-Login" ? formData.reloginReason || "" : "",
     };
+
+    // Debug: show payload sent to server (remove in production)
+    console.debug("Submitting application payload:", finalData);
 
     try {
       if (editingId) {
@@ -392,6 +423,7 @@ const CustForm = () => {
         // ✅ Always initialize partDisbursed properly
         setFormData({
           ...app,
+           reloginReason: app.reloginReason || "",
           loginDate: formattedLoginDate,
           disbursedDate: formattedDisbursedDate,
           propertyType: app.propertyType || "",
@@ -570,7 +602,7 @@ const CustForm = () => {
               {salesPerson}
             </label>
           ))}
-        </div>
+        </div>{" "}
         {/* Ref */} <label>Reference</label>
         <input
           list="Options"
@@ -815,6 +847,38 @@ const CustForm = () => {
                 />
               </>
             )}
+            {/* ===== SUBVENTION SECTION ===== */}
+            <label>Subvention?</label>
+            <div className="radio-group">
+              {["Yes", "No"].map((opt) => (
+                <label key={opt}>
+                  <input
+                    type="radio"
+                    name="subventionOption"
+                    value={opt}
+                    checked={formData.subventionOption === opt}
+                    onChange={handleChange}
+                    disabled={isFieldDisabled("subventionOption")}
+                  />
+                  {opt}
+                </label>
+              ))}
+            </div>
+
+            {formData.subventionOption === "Yes" && (
+              <>
+                <label>Subvention Amount</label>
+                <input
+                  type="text"
+                  name="subventionAmount"
+                  placeholder="Enter subvention amount"
+                  value={formData.subventionAmount || ""}
+                  onChange={handleChange}
+                  disabled={isFieldDisabled("subventionAmount")}
+                  required
+                />
+              </>
+            )}
           </>
         )}
         {/* ===== PART DISBURSED SECTION ===== */}
@@ -931,6 +995,25 @@ const CustForm = () => {
             </button>
           </>
         )}
+        {/* ===== RE-LOGIN SECTION ===== */}
+{formData.status === "Re-Login" && (
+  <>
+    <label style={{ fontWeight: "600", marginTop: "10px" }}>
+      Re-Login Reason
+    </label>
+
+    <input
+      type="text"
+      name="reloginReason"
+      placeholder="Enter re-login reason"
+      value={formData.reloginReason || ""}
+      onChange={handleChange}
+      disabled={isFieldDisabled("reloginReason")}
+      required
+    />
+  </>
+)}
+
         {/* Product */} <label>Product</label>
         <select
           name="product"
@@ -992,6 +1075,8 @@ const CustForm = () => {
             Commercial(Builder Purchase)
           </option>
           <option value="Commercial(Resale)">Commercial(Resale)</option>
+          <option value="Plot Purchase">Plot Purchase</option>
+          <option value="Plot + Construction">Plot + Construction</option>
           <option value="Industrial">Industrial</option>
           <option value="Property Not Decide">Property Not Decide</option>
         </select>
@@ -1005,8 +1090,8 @@ const CustForm = () => {
             }
             required
           />
-        )}
-        <br /> */}
+        )} */}
+        <br />
         <label>Property Details</label>
         <input
           type="text"
@@ -1017,7 +1102,7 @@ const CustForm = () => {
           disabled={isFieldDisabled("propertyDetails")} // ✅ uses helper
           required
         />
-        {/* Loan Amount */} <label>Market Value</label>
+        {/* Loan Amount */} <label>Property Market Value</label>
         <input
           type="text"
           inputMode="numeric"
@@ -1028,7 +1113,7 @@ const CustForm = () => {
           disabled={isFieldDisabled("mktValue")} // ✅ uses helper
           required
         />
-        {/* Loan Amount */} <label>Req Loan Amt</label>
+        {/* Loan Amount */} <label>Required Loan Amt</label>
         <input
           type="text"
           name="amount"
@@ -1037,7 +1122,7 @@ const CustForm = () => {
           onChange={handleChange}
           disabled={isFieldDisabled("amount")} // ✅ uses helper
           required
-        />
+        />{" "}
         {/* Property details */}
         <label>Rate of interest Offer</label>
         <input
@@ -1267,19 +1352,19 @@ const CustForm = () => {
             >
               {app.sales}
             </h2>
-            <p className="list-p">
+            <p className="list-p" style={{ backgroundColor: "yellow" }}>
               <b>Cust Name:</b> {app.name}
             </p>
             <p className="list-p">
               <b>Mobile:</b> {maskMobile(app.mobile)}
             </p>
-            <p className="list-p">
+            <p className="list-p" style={{ backgroundColor: "yellow" }}>
               <b>Bank:</b> {app.bank}
             </p>
             <p className="list-p">
               <b>Banker Name:</b> {app.bankerName}
             </p>
-            <p className="list-p">
+            <p className="list-p" style={{ backgroundColor: "yellow" }}>
               <b>Ref:</b> {app.ref}
             </p>
             <p className="list-p">
@@ -1292,26 +1377,25 @@ const CustForm = () => {
                 ? app.otherSourceChannel
                 : app.sourceChannel}
             </p>
-            <p className="list-p">
+            <p className="list-p" style={{ backgroundColor: "yellow" }}>
               <b>Product:</b> {app.product}
             </p>
-            <p className="list-p">
+            <p className="list-p" style={{ backgroundColor: "yellow" }}>
               <b>Req Loan Amount:</b> {app.amount}
             </p>
             <p className="list-p">
               <b>Status:</b> {app.status}
             </p>
             <p className="list-p">
-              <b>Date:</b> {safeFormatDate(app.loginDate)}
+              <b>Login Date:</b> {safeFormatDate(app.loginDate)}
             </p>
             {/* ✅ Show Disbursed Date only if status is Disbursed / Part Disbursed */}
-            {(app.status === "Disbursed") &&
-              app.disbursedDate && (
-                <p className="list-p">
-                  <strong>Disbursed Date:</strong>{" "}
-                  {safeFormatDate(app.disbursedDate)}
-                </p>
-              )}
+            {app.status === "Disbursed" && app.disbursedDate && (
+              <p className="list-p">
+                <strong>Disbursed Date:</strong>{" "}
+                {safeFormatDate(app.disbursedDate)}
+              </p>
+            )}
             {app.loanNumber && (
               <p className="list-p">
                 <strong>Loan Account No:</strong> {app.loanNumber}
@@ -1337,7 +1421,7 @@ const CustForm = () => {
             <p className="list-p">
               <b>Consulting: </b> {app.consulting}
             </p>{" "}
-            <p className="list-p">
+            <p className="list-p" style={{ backgroundColor: "yellow" }}>
               <b>PayOut: </b> {app.payout}
             </p>{" "}
             <p className="list-p">
@@ -1351,6 +1435,13 @@ const CustForm = () => {
               <b>Remark: </b>
               {app.remark}
             </p>
+            {app.status === "Re-Login" && (
+  <p className="list-p" style={{ color: "#d9534f" }}>
+    <b>Re-Login Reason: </b>
+    {app.reloginReason || "—"}
+  </p>
+)}
+
             {app.approvalStatus !== "Rejected by SB" && (
               <button className="edit-btn" onClick={() => handleEdit(app)}>
                 ✏️ Edit
