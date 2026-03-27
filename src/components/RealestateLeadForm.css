@@ -1,0 +1,645 @@
+/* ================================================================
+   RealestateLeadForm.css  –  clean, professional, minimal
+================================================================ */
+
+.rl-form-container {
+  max-width: 860px;
+}
+
+.rl-title {
+  font-size: 1.55rem;
+  color: #1a1a2e;
+}
+
+/* ── Section card ──────────────────────────────────── */
+.rl-section-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 20px 24px 24px;
+  margin-bottom: 20px;
+}
+
+.rl-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.rl-section-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #1e3a5f;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.rl-section-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #1e3a5f;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+/* ── Grids ──────────────────────────────────────────── */
+.rl-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.rl-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 680px) {
+  .rl-grid-3 { grid-template-columns: 1fr; }
+  .rl-grid-2 { grid-template-columns: 1fr; }
+}
+
+/* ── Field wrapper ──────────────────────────────────── */
+.rl-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.rl-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ── Inputs ─────────────────────────────────────────── */
+.rl-input {
+  width: 100%;
+  padding: 10px 13px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  background: #fff;
+  color: #111827;
+  outline: none;
+  transition: border-color 0.18s, box-shadow 0.18s;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.rl-input:focus {
+  border-color: #1e3a5f;
+  box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.1);
+}
+
+.rl-input-error {
+  border-color: #dc2626 !important;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1) !important;
+}
+
+.rl-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236b7280'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+  cursor: pointer;
+}
+
+.rl-textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+/* ── Error text ─────────────────────────────────────── */
+.rl-error {
+  color: #dc2626;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ── Calls wrapper ──────────────────────────────────── */
+.rl-calls-wrapper {
+  margin-bottom: 20px;
+}
+
+.rl-calls-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.rl-calls-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rl-call-count {
+  font-size: 0.75rem;
+  background: #f3f4f6;
+  color: #374151;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-weight: 700;
+  border: 1px solid #e5e7eb;
+}
+
+.rl-add-call-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #1e3a5f;
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.18s;
+}
+
+.rl-add-call-btn:hover {
+  background: #16304f;
+}
+
+/* ── Empty state ────────────────────────────────────── */
+.rl-empty-calls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 36px 24px;
+  background: #f9fafb;
+  border: 2px dashed #d1d5db;
+  border-radius: 10px;
+  color: #6b7280;
+  font-size: 0.9rem;
+  gap: 6px;
+  text-align: center;
+}
+
+/* ── Call card ──────────────────────────────────────── */
+.rl-call-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 18px 20px 20px;
+  margin-bottom: 14px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+
+.rl-call-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.rl-call-badge {
+  background: #1e3a5f;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 3px 12px;
+  border-radius: 20px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rl-remove-btn {
+  background: transparent;
+  border: 1px solid #fca5a5;
+  color: #dc2626;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.rl-remove-btn:hover {
+  background: #fef2f2;
+}
+
+/* ── Status color coding ────────────────────────────── */
+.rl-status--ringing             { color: #92400e; }
+.rl-status--call-not-connected  { color: #374151; }
+.rl-status--not-interested      { color: #991b1b; }
+.rl-status--call-connected      { color: #065f46; }
+.rl-status--interested          { color: #1e40af; }
+
+/* ── Property details section ───────────────────────── */
+.rl-interested-section {
+  margin-top: 18px;
+  padding: 18px 18px 14px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 9px;
+}
+
+.rl-interested-label {
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #374151;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+/* ── Sub-fields ─────────────────────────────────────── */
+.rl-sub-fields {
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+/* ── Messages ───────────────────────────────────────── */
+.rl-msg {
+  margin-top: 16px;
+  padding: 12px 18px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.rl-msg--success {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #16a34a;
+}
+
+.rl-msg--error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+}
+
+/* ── Submission Modal ───────────────────────────────── */
+.rl-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: rl-fade-in 0.3s ease;
+}
+
+.rl-modal-content {
+  background: white;
+  padding: 30px 40px;
+  border-radius: 16px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  text-align: center;
+  min-width: 320px;
+  animation: rl-slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.rl-modal-icon {
+  font-size: 3rem;
+  margin-bottom: 15px;
+  display: block;
+}
+
+.rl-modal-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1e3a5f;
+  margin-bottom: 8px;
+}
+
+.rl-modal-text {
+  font-size: 1rem;
+  color: #64748b;
+}
+
+/* Spinner */
+.rl-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f1f5f9;
+  border-top: 4px solid #1e3a5f;
+  border-radius: 50%;
+  margin: 0 auto 20px;
+  animation: rl-spin 1s linear infinite;
+}
+
+@keyframes rl-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes rl-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes rl-slide-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Submit Button ──────────────────────────────────── */
+.rl-submit-btn {
+  width: 100% !important;
+  color: white !important;
+  font-size: 1.2rem !important;
+  font-weight: 700 !important;
+  padding: 14px !important;
+  background: #1e3a5f !important;
+  border: none !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  transition: background 0.2s !important;
+  box-shadow: 0 4px 12px rgba(30, 58, 95, 0.2) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+}
+
+.rl-submit-btn:hover {
+  background: #16304f !important;
+  box-shadow: 0 6px 16px rgba(30, 58, 95, 0.3) !important;
+}
+/* ── MAIN PAGE WRAPPER (CENTERED) ───────────── */
+.rl-page-container {
+  background: #f1f5f9;
+  min-height: 100vh;
+  padding: 40px 0;
+}
+
+.rl-main-center-wrap {
+  /* width: 100%; */
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* Redesign Form Container as Centered Section */
+.rl-form-container {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  padding: 40px !important;
+  margin-bottom: 60px !important;
+}
+
+/* ── Integrated RECORD GRID (Vertical Table-Style) ───────────── */
+.rl-list-section {
+  margin-top: 60px;
+}
+
+.rl-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 20px;
+}
+
+.rl-list-title {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #1e3a5f;
+  margin: 0;
+}
+
+.rl-search-bar {
+  max-width: 350px;
+  background: white !important;
+  border: 1px solid #cbd5e1 !important;
+  padding: 12px 18px !important;
+  border-radius: 8px !important;
+  font-size: 1rem !important;
+}
+
+.rl-record-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+  gap: 30px;
+}
+
+/* Formal Record Card - Table-like Grid */
+.rl-record-card {
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Card Header - Modern Formal */
+.rl-record-header {
+  background: #f1f8ff;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 14px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rl-record-manager {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #1e3a5f;
+}
+
+.rl-record-badge {
+  background: #fff;
+  color: #1e3a5f;
+  border: 1px solid #e2e8f0;
+  padding: 4px 14px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+/* Card Body - Grid Rows & Cells */
+.rl-record-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.rl-record-row-1, .rl-record-row-2 {
+  display: grid;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.rl-record-row-1 { grid-template-columns: 1fr; }
+.rl-record-row-2 { grid-template-columns: 1fr 1fr; }
+
+.rl-record-cell {
+  padding: 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-right: 1px solid #e2e8f0;
+}
+
+.rl-record-cell:last-child {
+  border-right: none;
+}
+
+.rl-record-label {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.rl-record-val {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #0f172a;
+  min-height: 1.2em;
+}
+
+/* Status Colors & Alerts */
+.status-interested { color: #15803d; font-weight: 800; }
+.status-ringing { color: #b45309; font-weight: 800; }
+.status-not-interested { color: #4b5563; }
+.status-call-connected { color: #1d4ed8; font-weight: 800; }
+
+.rl-followup-alert {
+  color: #dc2626;
+  font-weight: 800;
+}
+
+/* Card Footer */
+.rl-record-footer {
+  padding: 16px 20px;
+  background: #fff;
+  display: flex;
+  justify-content: center; /* Center the edit button now that badge is gone */
+  margin-top: auto;
+}
+
+.rl-edit-btn {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 8px 30px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.2);
+  transition: all 0.2s;
+}
+
+.rl-edit-btn:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+}
+
+/* EMPTY STATE */
+.rl-empty-list {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 80px;
+  background: #fff;
+  border-radius: 12px;
+  border: 2px dashed #cbd5e1;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+/* RESPONSIVENESS */
+@media (max-width: 900px) {
+  .rl-record-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .rl-record-row-2 {
+    grid-template-columns: 1fr;
+  }
+  .rl-record-cell {
+    border-right: none;
+  }
+}
+
+
+/* ── Edit Mode Styles ──────────────────────────────── */
+.rl-cancel-edit-btn {
+  background: #dc2626;
+  color: white;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 7px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.18s;
+  margin-left: auto;
+}
+
+.rl-cancel-edit-btn:hover {
+  background: #b91c1c;
+}
+
+.form-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 30px;
+  gap: 20px;
+}
+
+.rl-readonly-badge {
+  background: #fef3c7;
+  color: #92400e;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-left: auto;
+}
+
+.rl-input:disabled,
+.rl-select:disabled {
+  background: #f3f4f6;
+  color: #6b7280;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.rl-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
