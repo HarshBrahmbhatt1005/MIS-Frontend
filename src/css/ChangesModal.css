@@ -1,0 +1,187 @@
+/* ChangesModal.css - Professional Slate Grey / High Readability Redesign */
+.changes-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(8px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+  animation: modalFadeIn 0.25s ease-out;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.changes-modal {
+  background-color: #ffffff;
+  border-radius: 16px;
+  width: 650px; /* Slightly wider for increased font size */
+  max-width: 95%;
+  max-height: 80vh;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #d1d5db;
+  animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalSlideUp {
+  from { transform: translateY(30px) scale(0.98); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.changes-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 32px;
+  border-bottom: 2px solid #f1f5f9;
+  background: #ffffff;
+}
+
+.changes-modal-header h2 {
+  margin: 0;
+  font-size: 1.4rem; /* Increased font size */
+  font-weight: 800;
+  color: #334155; /* Neutral Dark Slate Grey */
+  letter-spacing: -0.01em;
+}
+
+.close-btn {
+  background: #f1f5f9;
+  border: none;
+  font-size: 1.3rem;
+  cursor: pointer;
+  color: #64748b;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+  transform: rotate(90deg);
+}
+
+.changes-modal-body {
+  overflow-y: auto;
+  padding: 0;
+  background-color: #ffffff;
+}
+
+.changes-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.change-item {
+  display: grid;
+  grid-template-columns: 160px 1fr 1fr; /* Adjusted for wider spacing */
+  align-items: center;
+  padding: 24px 32px; /* Increased padding */
+  border-bottom: 1px solid #f1f5f9;
+  gap: 24px;
+}
+
+.change-item:last-child {
+  border-bottom: none;
+}
+
+.change-label {
+  font-weight: 700;
+  color: #475569;
+  font-size: 0.95rem; /* Increased label size */
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.change-values {
+  display: contents;
+}
+
+.val-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px; /* Increased spacing */
+}
+
+.val-tag {
+  font-size: 0.75rem; /* Increased tag size */
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.val-tag.old { color: #94a3b8; }
+.val-tag.new { color: #ea580c; } /* Distinct Orange/Amber for readability */
+
+.val-content {
+  font-size: 1.05rem; /* Significantly increased data font size */
+  padding: 12px 16px; /* Increased density */
+  border-radius: 8px;
+  word-break: break-all;
+  line-height: 1.5;
+}
+
+.val-content.old {
+  background-color: #f8fafc;
+  color: #64748b;
+  text-decoration: line-through;
+  border: 1px solid #e2e8f0;
+}
+
+.val-content.new {
+  background-color: #fff7ed; /* Soft Amber background */
+  color: #9a3412; /* High contrast amber-brown */
+  border: 1px solid #ffedd5;
+  font-weight: 600;
+  box-shadow: 0 2px 4px rgba(234, 88, 12, 0.05);
+}
+
+.changes-modal-footer {
+  padding: 24px 32px;
+  border-top: 2px solid #f1f5f9;
+  display: flex;
+  justify-content: flex-end;
+  background-color: #f8fafc;
+}
+
+.btn-close {
+  background-color: #334155; /* Neutral Dark Slate Grey */
+  color: white;
+  border: none;
+  padding: 14px 28px; /* Bigger button */
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 1rem; /* Bigger font */
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(51, 65, 85, 0.15);
+}
+
+.btn-close:hover {
+  background-color: #1e293b;
+  transform: translateY(-1.5px);
+  box-shadow: 0 8px 16px rgba(51, 65, 85, 0.2);
+}
+
+.empty-changes {
+  text-align: center;
+  padding: 80px 32px;
+  color: #94a3b8;
+  font-size: 1.1rem;
+}

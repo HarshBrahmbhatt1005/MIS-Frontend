@@ -1,0 +1,327 @@
+# Backend Implementation for PD Status
+
+## MongoDB Schema Update
+
+Add `pdStatus` and `pdDate` fields to your application schema:
+
+```javascript
+const applicationSchema = new mongoose.Schema({
+  // ... existing fields ...
+  
+  status: {
+    type: String,
+    enum: ["Login", "PD", "Sanction", "Disbursed", "Part Disbursed", "Re-Login", "Rejected", "Withdraw", "Hold"],
+    required: true
+  },
+  
+  pdStatus: {
+    type: String,
+    enum: ["Yes", "No", ""],
+    default: ""
+  },
+  
+  pdDate: {
+    type: Date,
+    default: null
+  },
+  
+  reloginReason: {
+    type: String,
+    default: ""
+  },
+  
+  // ... other fields ...
+});
+```
+
+## API Route Updates
+
+### POST /api/applications (Create)
+
+Ensure the route accepts `pdRemark`:
+
+```javascript
+router.post("/api/applications", async (req, res) => {
+  try {
+    const applicationData = {
+      ...req.body,
+      pdStatus: req.body.status === "PD" ? req.body.pdStatus || "" : "",
+      pdDate: req.body.status === "PD" ? req.body.pdDate || null : null,
+    };
+    
+    const newApplication = new Application(applicationData);
+    await newApplication.save();
+    
+    res.status(201).json(newApplication);
+  } catch (err) {
+    console.error("Error creating application:", err);
+    res.status(500).json({ error: "Failed to create application" });
+  }
+});
+```
+
+### PATCH /api/applications/:id (Update)
+
+Ensure the route accepts `pdRemark`:
+
+```javascript
+router.patch("/api/applications/:id", async (req, res) => {
+  try {
+    const updateData = {
+      ...req.body,
+      pdStatus: req.body.status === "PD" ? req.body.pdStatus || "" : "",
+      pdDate: req.body.status === "PD" ? req.body.pdDate || null : null,
+    };
+    
+    const updatedApp = await Application.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true, runValidators: true }
+    );
+    
+    if (!updatedApp) {
+      return res.status(404).json({ error: "Application not found" });
+    }
+    
+    res.json(updatedApp);
+  } catch (err) {
+    console.error("Error updating application:", err);
+    res.status(500).json({ error: "Failed to update application" });
+  }
+});
+```
+
+## Validation (Optional)
+
+Add validation to ensure PD status and remark are provided when status is PD:
+
+```javascript
+applicationSchema.pre("save", function(next) {
+  if (this.status === "PD") {
+    if (!this.pdStatus || this.pdStatus.trim() === "") {
+      return next(new Error("PD Status (Yes/No) is required when status is PD"));
+    }
+    if (!this.pdDate) {
+      return next(new Error("PD Date is required when status is PD"));
+    }
+  }
+  next();
+});
+```
+
+## Excel Export Update
+
+If you have Excel export functionality, add `pdRemark` to the exported columns:
+
+```javascript
+const exportData = applications.map(app => ({
+  // ... existing fields ...
+  Status: app.status,
+  "PD Status": app.pdStatus || "",
+  "PD Date": app.pdDate ? new Date(app.pdDate).toLocaleDateString("en-GB") : "",
+  "Re-Login Reason": app.reloginReason || "",
+  // ... other fields ...
+}));
+```
+
+## Testing
+
+### Test Case 1: Create Application with PD Status
+
+```bash
+curl -X POST http://localhost:5000/api/applications \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "John Doe",
+    "mobile": "9876543210",
+    "status": "PD",
+    "pdStatus": "Yes",
+    "pdDate": "2026-02-20",
+    "sales": "Vinay Mishra"
+  }'
+```
+
+### Test Case 2: Update Application to PD Status
+
+```bash
+curl -X PATCH http://localhost:5000/api/applications/APPLICATION_ID \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "PD",
+    "pdStatus": "No",
+    "pdDate": "2026-02-25"
+  }'
+```
+
+### Test Case 3: Change Status from PD to Login
+
+```bash
+curl -X PATCH http://localhost:5000/api/applications/APPLICATION_ID \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "Login",
+    "pdStatus": "",
+    "pdDate": null
+  }'
+```
+
+## Migration Script (If Needed)
+
+If you have existing applications, run this migration to add the pdRemark field:
+
+```javascript
+// migration.js
+const Application = require('./models/Application');
+
+async function migratePdFields() {
+  try {
+    await Application.updateMany(
+      { 
+        $or: [
+          { pdStatus: { $exists: false } },
+          { pdDate: { $exists: false } }
+        ]
+      },
+      { 
+        $set: { 
+          pdStatus: "",
+          pdDate: null
+        } 
+      }
+    );
+    
+    console.log("✅ Migration completed: pdStatus and pdDate fields added to all applications");
+  } catch (err) {
+    console.error("❌ Migration failed:", err);
+  }
+}
+
+migratePdFields();
+```
+
+## Summary
+
+✅ Added "PD" status option in the status enum  
+✅ Added `pdStatus` field (Yes/No radio button)  
+✅ Added `pdDate` field to store PD date  
+✅ Frontend displays PD status and date when status is "PD"  
+✅ PD fields are only saved when status is "PD"  
+✅ PD fields are editable even after approval  
+✅ Clean orange-colored display for PD information in the application list
+
+
+---
+
+## Frontend Changes Made
+
+### 1. Added "PD" to Status Radio Buttons
+
+The status options now include:
+- Login
+- **PD** (NEW)
+- Sanction
+- Disbursed
+- Part Disbursed
+- Re-Login
+- Rejected
+- Withdraw
+- Hold
+
+### 2. Added PD Status and Date Fields
+
+When user selects "PD" status, two fields appear:
+
+1. **PD Status Radio Button**:
+   - Options: Yes / No
+   - Positioned above PD Date
+   - Stores user's selection
+
+2. **PD Date Input**:
+   - Type: Date picker
+   - Required field (must be filled when PD is selected)
+   - Stores date in YYYY-MM-DD format
+   - Displays as DD-MM-YYYY in application list
+
+### 3. Updated Form Data
+
+Added `pdStatus: ""` and `pdDate: ""` to:
+- `initialFormData` object
+- `isFieldDisabled` function (both editable even after approval)
+- `handleChange` editable fields list
+- `handleEdit` function (loads existing PD status and date)
+- `handleSubmit` function (only sends pdStatus and pdDate when status is "PD")
+
+### 4. Display in Application List
+
+When an application has status "PD", it displays:
+```
+PD Status: Yes
+PD Date: 20-02-2026
+```
+
+Styled with:
+- Orange text color (#ff9800)
+- Light orange background (#fff3e0)
+- Padding and border radius for visibility
+- Two lines: first shows Yes/No status, second shows formatted date
+- Date formatted as DD-MM-YYYY for Indian format
+
+---
+
+## Visual Examples
+
+### Form View (When PD is Selected)
+
+```
+Status: ○ Login  ● PD  ○ Sanction  ○ Disbursed  ...
+
+PD Status: ● Yes  ○ No
+
+PD Date
+┌─────────────────────────────────────────┐
+│ [Date Picker: 20/02/2026]              │
+└─────────────────────────────────────────┘
+```
+
+### Application List View
+
+```
+Name: John Doe
+Mobile: XXXXXX3210
+Status: PD
+
+┌─────────────────────────────────────────┐
+│ PD Status: Yes                          │
+│ PD Date: 20-02-2026                     │
+└─────────────────────────────────────────┘
+```
+
+---
+
+## Usage Flow
+
+1. User fills in customer details
+2. User selects "PD" status
+3. PD Status radio buttons appear (Yes/No)
+4. User selects Yes or No
+5. PD Date field appears (required)
+6. User selects date (e.g., "20/02/2026")
+7. User submits form
+8. Backend stores `status: "PD"`, `pdStatus: "Yes"`, and `pdDate: "2026-02-20"`
+9. In application list, PD status and date are displayed in orange box
+10. When editing, both PD status and date can be updated even if approved
+
+---
+
+## Key Features
+
+✅ PD status added between "Login" and "Sanction"  
+✅ Yes/No radio button for PD Status  
+✅ Date picker for PD Date (only shows when PD selected)  
+✅ Required validation (must select date when PD)  
+✅ Both PD status and date editable even after approval  
+✅ Clean display in application list showing both status and date  
+✅ Orange color coding for visibility  
+✅ Date formatted as DD-MM-YYYY in display  
+✅ Consistent with other date fields pattern  
+✅ No breaking changes to existing functionality

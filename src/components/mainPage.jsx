@@ -23,6 +23,13 @@ const MainPage = () => {
         >
           Project Login Form
         </button>
+
+        <button
+          onClick={() => navigate("/realestate-lead-form")}
+          className="btn lead-btn"
+        >
+          Realestate Lead Form
+        </button>
       </div>
     </div>
   );

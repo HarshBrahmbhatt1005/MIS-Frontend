@@ -19,7 +19,8 @@ const STATUS_OPTIONS = [
   "Ringing",
   "Call Not Connected",
   "Not Interested",
-  "Call Connected",
+  "Reschedule",
+  "Follow-up",
   "Interested",
 ];
 
@@ -39,18 +40,25 @@ const RESIDENTIAL_CATEGORIES = [
 ];
 
 const COMMERCIAL_TYPES = ["Shop", "Showroom", "Office"];
-
 const MANAGERS = [
   "Dharmesh Bhavsar",
-  "Robins Kapadia",
-  "Vinay Mishra",
+  "Dhaval Kataria",
+  "Dhruvi Soni",
+  "Hardik Bhavsar",
   "Harsh Brahmbhatt",
-  "Niraj Gelot",
+  "Khusboo Patel",
   "Mehul Prajapati",
+  "Nidhi Tank",
+  "Parag Shah",
+  "Pradeep Trivedi",
+  "Robins Kapadia",
+  "Sonali Pol",
+  "Unnati Raval",
+  "Vinay Mishra",
 ];
 
 const RealestateLeadForm = () => {
-  const [leadDate, setLeadDate] = useState(TODAY);
+  const [leadDate, setLeadDate] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerNumber, setCustomerNumber] = useState("");
   const [source, setSource] = useState("");
@@ -78,6 +86,10 @@ const RealestateLeadForm = () => {
   const [leads, setLeads] = useState([]);
   const [loadingLeads, setLoadingLeads] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [expandedHistory, setExpandedHistory] = useState({});
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [sourceFilter, setSourceFilter] = useState("All");
+  const [managerFilter, setManagerFilter] = useState("All");
 
   // Edit mode state
   const [isEditMode, setIsEditMode] = useState(false);
@@ -98,11 +110,19 @@ const RealestateLeadForm = () => {
     }
   };
 
-  const filteredLeads = leads.filter(
-    (l) =>
+  const filteredLeads = leads.filter((l) => {
+    const matchesSearch =
       l.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      l.customerNumber?.includes(searchTerm)
-  );
+      l.customerNumber?.includes(searchTerm);
+
+    const lastCall = l.calls && l.calls.length > 0 ? l.calls[l.calls.length - 1] : null;
+
+    const matchesStatus = statusFilter === "All" || lastCall?.status === statusFilter;
+    const matchesSource = sourceFilter === "All" || l.source === sourceFilter;
+    const matchesManager = managerFilter === "All" || l.calls?.some(c => c.manager === managerFilter);
+
+    return matchesSearch && matchesStatus && matchesSource && matchesManager;
+  });
 
   const formatDate = (dateStr) => {
     if (!dateStr) return "N/A";
@@ -135,7 +155,6 @@ const RealestateLeadForm = () => {
   };
 
   const removeCall = (idx) => {
-    if (calls.length <= 1) return;
     setCalls((prev) => prev.filter((_, i) => i !== idx));
   };
 
@@ -299,6 +318,31 @@ const RealestateLeadForm = () => {
     resetForm();
   };
 
+  const handleExportToExcel = async () => {
+    const password = window.prompt("Enter download password to export Excel:");
+    if (password === null) return; // user cancelled
+
+    try {
+      const verify = await axios.post(`${API}/verify-password`, { password });
+      if (!verify.data.success) {
+        alert("Incorrect password. Export denied.");
+        return;
+      }
+
+      const response = await axios.get(`${API}/export`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `realestate-leads-${new Date().toISOString().split('T')[0]}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err?.response?.data?.message || "Incorrect password. Export denied.");
+    }
+  };
+
   const err = (key) =>
     errors[key] ? <span className="rl-error">{errors[key]}</span> : null;
 
@@ -331,7 +375,7 @@ const RealestateLeadForm = () => {
                   <label className="rl-label">Lead Date <span className="required-asterisk">*</span></label>
                   <input
                     type="date"
-                    value={leadDate}
+                    value={leadDate || ""}
                     onChange={(e) => setLeadDate(e.target.value)}
                     className={`rl-input${errors.leadDate ? " rl-input-error" : ""}`}
                     disabled={isEditMode}
@@ -405,7 +449,7 @@ const RealestateLeadForm = () => {
                 <div key={idx} className="rl-call-card">
                   <div className="rl-call-card-header">
                     <span className="rl-call-badge">Call #{idx + 1}</span>
-                    {calls.length > 1 && (
+                    {idx > 0 && (
                       <button type="button" className="rl-remove-btn" onClick={() => removeCall(idx)}>✕ Remove</button>
                     )}
                   </div>
@@ -597,17 +641,63 @@ const RealestateLeadForm = () => {
         {/* ── Leads Gallery display (Vertical Record Grid - Redesigned) ── */}
         <div className="rl-list-section">
           <div className="rl-list-header">
-            <h2 className="rl-list-title">Existing Lead Records</h2>
-            <div className="rl-list-search">
-              <input 
-                type="text" 
-                placeholder="Search by name or mobile..." 
+            <div className="rl-list-title-row">
+              <h2 className="rl-list-title">Existing Lead Records</h2>
+              {!loadingLeads && (
+                <span className="rl-results-count">
+                  Showing <strong>{filteredLeads.length}</strong> of <strong>{leads.length}</strong> leads
+                </span>
+              )}
+            </div>
+            <div className="rl-list-controls">
+              <input
+                type="text"
+                placeholder="🔍 Search by name or mobile..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="rl-input rl-search-bar"
               />
+              <div className="rl-filters-row">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="rl-input rl-filter-select"
+                >
+                  <option value="All">All Status</option>
+                  {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <select
+                  value={sourceFilter}
+                  onChange={(e) => setSourceFilter(e.target.value)}
+                  className="rl-input rl-filter-select"
+                >
+                  <option value="All">All Sources</option>
+                  {SOURCE_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <select
+                  value={managerFilter}
+                  onChange={(e) => setManagerFilter(e.target.value)}
+                  className="rl-input rl-filter-select"
+                >
+                  <option value="All">All Managers</option>
+                  {MANAGERS.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+                <button
+                  onClick={handleExportToExcel}
+                  className="rl-export-btn"
+                  title="Export all leads to Excel"
+                >
+                  📊 Export
+                </button>
+              </div>
             </div>
           </div>
+
+          {!loadingLeads && (
+            <div className="rl-results-count">
+              Showing <strong>{filteredLeads.length}</strong> of <strong>{leads.length}</strong> leads
+            </div>
+          )}
 
           {loadingLeads ? (
             <div className="rl-loader-inline">
@@ -639,11 +729,15 @@ const RealestateLeadForm = () => {
                         </div>
                       </div>
 
-                      {/* Row 2: Reference */}
-                      <div className="rl-record-row-1">
+                      {/* Row 2: Reference & Lead Date */}
+                      <div className="rl-record-row-2">
                         <div className="rl-record-cell">
                           <label className="rl-record-label">REF</label>
                           <span className="rl-record-val">{lead.referenceOf || "N/A"}</span>
+                        </div>
+                        <div className="rl-record-cell">
+                          <label className="rl-record-label">LEAD GENERATED ON</label>
+                          <span className="rl-record-val">{formatDate(lead.leadDate)}</span>
                         </div>
                       </div>
 
@@ -671,33 +765,73 @@ const RealestateLeadForm = () => {
                         </div>
                       </div>
 
-                      {/* Row 5: Lead Date */}
-                      <div className="rl-record-row-1">
-                        <div className="rl-record-cell">
-                          <label className="rl-record-label">LEAD GENERATED ON</label>
-                          <span className="rl-record-val">{formatDate(lead.leadDate)}</span>
+                      {/* Row 4b: Size & Category (Residential only) */}
+                      {lead.propertyType === "Residential" && (lead.residentialSize || lead.residentialCategory) && (
+                        <div className="rl-record-row-2">
+                          <div className="rl-record-cell">
+                            <label className="rl-record-label">SIZE</label>
+                            <span className="rl-record-val">{lead.residentialSize || "N/A"}</span>
+                          </div>
+                          <div className="rl-record-cell">
+                            <label className="rl-record-label">CATEGORY</label>
+                            <span className="rl-record-val">{lead.residentialCategory || "N/A"}</span>
+                          </div>
                         </div>
-                      </div>
+                      )}
 
-                      {/* Row 6: Interaction Status */}
-                      <div className="rl-record-row-1">
+                      {/* Row 4c: Commercial Type */}
+                      {lead.propertyType === "Commercial" && lead.commercialType && (
+                        <div className="rl-record-row-1">
+                          <div className="rl-record-cell">
+                            <label className="rl-record-label">COMMERCIAL TYPE</label>
+                            <span className="rl-record-val">{lead.commercialType}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Row 6 & 7: Last Status & Next Follow Up in same row */}
+                      <div className="rl-record-row-2">
                         <div className="rl-record-cell">
                           <label className="rl-record-label">LAST STATUS</label>
                           <span className={`rl-record-val rl-status-text status-${(lead.calls[lead.calls.length - 1]?.status || "unknown").toLowerCase().replace(/\s+/g, '-')}`}>
                             {lead.calls[lead.calls.length - 1]?.status || "N/A"}
                           </span>
                         </div>
+                        <div className="rl-record-cell">
+                          <label className="rl-record-label">NEXT FOLLOW UP</label>
+                          <span className="rl-record-val rl-followup-alert">
+                            {lead.calls.some(c => c.followUpDate) ? formatDate([...lead.calls].reverse().find(c => c.followUpDate)?.followUpDate) : "N/A"}
+                          </span>
+                        </div>
                       </div>
 
-                      {/* Row 7: Follow up (if any) */}
-                      {lead.calls.some(c => c.followUpDate) && (
-                        <div className="rl-record-row-1">
-                          <div className="rl-record-cell">
-                            <label className="rl-record-label">NEXT FOLLOW UP</label>
-                            <span className="rl-record-val rl-followup-alert">
-                              {formatDate(lead.calls.find(c => c.followUpDate)?.followUpDate)}
-                            </span>
-                          </div>
+                      {/* Call History - Collapsible */}
+                      {lead.calls.length > 0 && (
+                        <div style={{ borderTop: "1px solid #e0e7f0" }}>
+                          <button
+                            onClick={() => setExpandedHistory(prev => ({ ...prev, [lead._id]: !prev[lead._id] }))}
+                            style={{ width: "100%", background: "none", border: "none", cursor: "pointer", padding: "7px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", fontWeight: "700", color: "#1e3a5f", textTransform: "uppercase", letterSpacing: "0.5px" }}
+                          >
+                            <span>Call History ({lead.calls.length})</span>
+                            <span>{expandedHistory[lead._id] ? "▲" : "▼"}</span>
+                          </button>
+                          {expandedHistory[lead._id] && (
+                            <div style={{ padding: "0 14px 8px" }}>
+                              {lead.calls.map((call, idx) => (
+                                <div key={idx} style={{ background: "#f7f9fc", borderRadius: "5px", padding: "5px 8px", marginBottom: "4px", border: "1px solid #e0e7f0", fontSize: "11px" }}>
+                                  <div style={{ fontWeight: "700", color: "#1e3a5f", marginBottom: "2px" }}>
+                                    Call #{idx + 1} — {formatDate(call.callingDate)}
+                                  </div>
+                                  <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", color: "#444" }}>
+                                    <span><span style={{ color: "#888", textTransform: "uppercase", fontSize: "10px" }}>Manager: </span>{call.manager || "N/A"}</span>
+                                    <span><span style={{ color: "#888", textTransform: "uppercase", fontSize: "10px" }}>Status: </span>{call.status || "N/A"}</span>
+                                    {call.followUpDate && <span style={{ color: "#c0392b", fontWeight: "600" }}><span style={{ color: "#888", textTransform: "uppercase", fontSize: "10px" }}>Follow Up: </span>{formatDate(call.followUpDate)}</span>}
+                                  </div>
+                                  {call.remarks && <div style={{ color: "#555", marginTop: "2px" }}><span style={{ color: "#888", textTransform: "uppercase", fontSize: "10px" }}>Remarks: </span>{call.remarks}</div>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

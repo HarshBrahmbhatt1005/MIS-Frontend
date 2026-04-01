@@ -417,28 +417,92 @@
 }
 
 .rl-list-header {
+  margin-bottom: 24px;
+}
+
+.rl-list-title-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 30px;
-  border-bottom: 2px solid #e2e8f0;
-  padding-bottom: 20px;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
 .rl-list-title {
-  font-size: 2rem;
+  font-size: 1.6rem;
   font-weight: 800;
   color: #1e3a5f;
   margin: 0;
 }
 
+.rl-list-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .rl-search-bar {
-  max-width: 350px;
+  width: 100%;
   background: white !important;
   border: 1px solid #cbd5e1 !important;
-  padding: 12px 18px !important;
+  padding: 11px 16px !important;
   border-radius: 8px !important;
-  font-size: 1rem !important;
+  font-size: 0.95rem !important;
+  box-sizing: border-box;
+}
+
+.rl-filters-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.rl-filter-select {
+  flex: 1;
+  min-width: 140px;
+  background: white !important;
+  border: 1px solid #cbd5e1 !important;
+  padding: 10px 14px !important;
+  border-radius: 8px !important;
+  font-size: 0.88rem !important;
+  font-weight: 600 !important;
+  color: #374151 !important;
+}
+
+/* ── Results Count ─────────────────────────────────── */
+.rl-results-count {
+  font-size: 0.82rem;
+  color: #64748b;
+  padding: 5px 14px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.rl-results-count strong {
+  color: #1e3a5f;
+  font-weight: 800;
+}
+
+.rl-export-btn {
+  background: #10b981;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);
+  white-space: nowrap;
+}
+
+.rl-export-btn:hover {
+  background: #059669;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 8px -1px rgba(16, 185, 129, 0.3);
 }
 
 .rl-record-grid {
@@ -462,14 +526,14 @@
 .rl-record-header {
   background: #f1f8ff;
   border-bottom: 1px solid #e2e8f0;
-  padding: 14px 20px;
+  padding: 10px 14px;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
 .rl-record-manager {
-  font-size: 1.4rem;
+  font-size: 1.15rem;
   font-weight: 700;
   color: #1e3a5f;
 }
@@ -500,10 +564,10 @@
 .rl-record-row-2 { grid-template-columns: 1fr 1fr; }
 
 .rl-record-cell {
-  padding: 12px 20px;
+  padding: 7px 14px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   border-right: 1px solid #e2e8f0;
 }
 
@@ -512,7 +576,7 @@
 }
 
 .rl-record-label {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 800;
   color: #64748b;
   text-transform: uppercase;
@@ -520,10 +584,10 @@
 }
 
 .rl-record-val {
-  font-size: 1rem;
+  font-size: 0.88rem;
   font-weight: 600;
   color: #0f172a;
-  min-height: 1.2em;
+  min-height: 1.1em;
 }
 
 /* Status Colors & Alerts */
@@ -539,10 +603,10 @@
 
 /* Card Footer */
 .rl-record-footer {
-  padding: 16px 20px;
+  padding: 10px 14px;
   background: #fff;
   display: flex;
-  justify-content: center; /* Center the edit button now that badge is gone */
+  justify-content: center;
   margin-top: auto;
 }
 
@@ -580,6 +644,15 @@
 @media (max-width: 900px) {
   .rl-record-grid {
     grid-template-columns: 1fr;
+  }
+
+  .rl-filters-row {
+    flex-direction: column;
+  }
+
+  .rl-filter-select,
+  .rl-export-btn {
+    width: 100%;
   }
 }
 

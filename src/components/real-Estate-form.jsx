@@ -1,40 +1,35 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
 import "../css/BuilderVisitForm.css"; // tumhara CSS
+import RejectionModal from "./RejectionModal";
+import EmailSendingIndicator from "./EmailSendingIndicator";
+import SubmissionLoader from "./SubmissionLoader";
+import { sendForm2Notification, sendLevel2ApprovalNotification, validateEmailConfig } from "../services/emailService";
 
 const BuilderVisitForm = () => {
   const API = `${import.meta.env.VITE_API_URL}/api/builder-visits`;
 
   const initialForm = {
     builderName: "",
+    builderNumber: "",
     groupName: "",
     projectName: "",
     location: "",
     officePersonDetails: "",
+    officePersonNumber: "",
+    executives: [],
     gentry: "",
-    propertySizes: [
-      {
-        type: "Residential",
-        size: "",
-        sqft: "",
-        selldedAmount: "",
-        regularPrice: "",
-        downPayment: "",
-        maintenance: "",
-        aecAuda: "",
-        floor: "",
-        boxPrice: "",
-      },
-    ],
+    propertySizes: [],
+    areaType: "", // Area Type at form level
     floor: "",
     sqft: "",
     aecAuda: "",
     regularPrice: "",
-    downPayment: "",
     maintenance: "",
     developmentType: "",
     negotiable: "",
     totalUnitsBlocks: "",
+    totalBlocks: "",
     propertySize: "",
     expectedCompletionDate: "",
     financingRequirements: "",
@@ -45,15 +40,81 @@ const BuilderVisitForm = () => {
     nearbyProjects: "",
     enquiryType: "",
     unitsForSale: "",
-    timeLimitMonths: "",
     remark: "",
+    usps: [], // Multi-select USPs
+    totalAmenities: "", // Total Amenities number
+    allotedCarParking: "", // Alloted Car Parking dropdown
     payout: "",
     stageOfConstruction: "",
+    saiFakiraManager: "",
+    submittedAt: "",
+    // Clear Floor Height fields (dynamic based on developme+nt type)
+    clearFloorHeight: "", // For Residential only
+    clearFloorHeightRetail: "", // For Commercial and Resi+Commercial
+    clearFloorHeightFlats: "", // For Resi+Commercial
+    clearFloorHeightOffices: "", // For Commercial only
+    approval: {
+      level1: { status: "Pending", by: "", at: "", remarks: "" },
+      level2: { status: "Pending", by: "", at: "", remarks: "" },
+    },
   };
 
   const [formData, setFormData] = useState(initialForm);
   const [visits, setVisits] = useState([]);
   const [editingId, setEditingId] = useState(null);
+  const [cardsUnlocked, setCardsUnlocked] = useState(false);
+
+  // All Properties password gate
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordVerifying, setPasswordVerifying] = useState(false);
+  // Session token stored in memory only (not localStorage/cookie)
+  const sessionTokenRef = useRef(null);
+
+  // Filter states
+  const [filterProjectName, setFilterProjectName] = useState("");
+  const [filterGroupName, setFilterGroupName] = useState("");
+  const [filterApprovalStatus, setFilterApprovalStatus] = useState("");
+  const [filterManager, setFilterManager] = useState("");
+  const [filterDate, setFilterDate] = useState("");
+  const [showAllCards, setShowAllCards] = useState(false);
+
+  // State for rejection remarks modal
+  const [rejectionModal, setRejectionModal] = useState({
+    isOpen: false,
+    visitId: null,
+    level: null,
+    remarks: ""
+  });
+
+  // Email notification states
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
+  
+  // Form submission state
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // USP dropdown state
+  const [uspDropdownOpen, setUspDropdownOpen] = useState(false);
+  const uspDropdownRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (uspDropdownRef.current && !uspDropdownRef.current.contains(event.target)) {
+        setUspDropdownOpen(false);
+      }
+    };
+
+    if (uspDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [uspDropdownOpen]);
 
   // 💡 Format numbers with Indian commas safely
   const formatIndian = (val) => {
@@ -62,59 +123,421 @@ const BuilderVisitForm = () => {
     return isNaN(num) ? val : num.toLocaleString("en-IN");
   };
 
-  // 🔹 Fetch all builder visits
-  const fetchVisits = async () => {
+  // 💡 Format submission date and time
+  const formatSubmissionDateTime = (isoString) => {
+    if (!isoString) return "Not available";
+    
+    const date = new Date(isoString);
+    
+    // Format date as DD-MM-YYYY
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    
+    // Format time as HH:MM AM/PM
+    let hours = date.getHours();
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12; // 0 should be 12
+    const formattedTime = `${hours}:${minutes} ${ampm}`;
+    
+    return `${day}-${month}-${year} at ${formattedTime}`;
+  };
+
+  // 🔹 Fetch builder visits (supports 'all' view)
+  const fetchVisits = async (isAll = false) => {
     try {
-      const res = await axios.get(API);
-      setVisits(Array.isArray(res.data) ? res.data : []);
+      // ✅ If 'isAll' is true, we request all properties (including approved ones)
+      const fetchURL = isAll ? `${API}?view=all` : API;
+      const res = await axios.get(fetchURL);
+      let data = Array.isArray(res.data) ? res.data : [];
+      
+      // Find the earliest date from cards that have submittedAt
+      let earliestDate = null;
+      data.forEach((card) => {
+        if (card.submittedAt) {
+          const cardDate = new Date(card.submittedAt);
+          if (!earliestDate || cardDate < earliestDate) {
+            earliestDate = cardDate;
+          }
+        }
+      });
+      
+      // If we found an earliest date, set old cards (without submittedAt) to one day before
+      if (earliestDate) {
+        const oneDayBefore = new Date(earliestDate);
+        oneDayBefore.setDate(oneDayBefore.getDate() - 1);
+        
+        data = data.map((card) => {
+          if (!card.submittedAt) {
+            return {
+              ...card,
+              submittedAt: oneDayBefore.toISOString()
+            };
+          }
+          return card;
+        });
+      }
+      
+      setVisits(data);
     } catch (err) {
       console.error("Fetch error:", err);
       setVisits([]);
     }
   };
 
+  // ✅ Refetch whenever the 'All Properties' toggle is switched
   useEffect(() => {
-    fetchVisits();
-  }, []);
+    fetchVisits(showAllCards);
+  }, [showAllCards]);
 
-  // --- FORM INPUT HANDLERS ---
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+  // Helper function to scroll to a field and highlight it
+  const scrollToField = (fieldName, propertyIndex = null) => {
+    let element;
+    
+    if (propertyIndex !== null) {
+      // For property-specific fields like PLC, FRC - find the radio group container
+      const radioInputs = document.querySelectorAll(`input[name="${fieldName}-${propertyIndex}"]`);
+      if (radioInputs.length > 0) {
+        // Find the parent radio-group div
+        element = radioInputs[0].closest('.radio-group');
+      }
+    } else {
+      // For regular form fields
+      element = document.querySelector(`[name="${fieldName}"], input[name="${fieldName}"], select[name="${fieldName}"], textarea[name="${fieldName}"]`);
+    }
+    
+    if (element) {
+      // Scroll to the element
+      element.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'center' 
+      });
+      
+      // Add a red border temporarily to highlight the field
+      element.style.border = '2px solid red';
+      element.style.boxShadow = '0 0 10px rgba(255, 0, 0, 0.5)';
+      element.style.borderRadius = '4px';
+      
+      // Focus the first input in the element if it's focusable
+      const focusableInput = element.querySelector('input, select, textarea');
+      if (focusableInput && focusableInput.focus) {
+        setTimeout(() => focusableInput.focus(), 500);
+      }
+      
+      // Remove the highlight after 3 seconds
+      setTimeout(() => {
+        element.style.border = '';
+        element.style.boxShadow = '';
+        element.style.borderRadius = '';
+      }, 3000);
+      
+      return true;
+    }
+    return false;
   };
 
-  const handlePropertyChange = (index, e) => {
+  // --- FORM INPUT HANDLERS ---
+  const handleChange = useCallback((e) => {
+    const { name, value } = e.target;
+    
+    // When development type changes, automatically add first property AND clear floor height fields
+    if (name === "developmentType" && value) {
+      setFormData((prev) => {
+        const prevType = prev.developmentType;
+
+        // Determine which existing properties to keep based on transition
+        let keptProperties = [];
+
+        if (value === "Residential" && prevType === "Residential + Commercial") {
+          // Keep only Residential properties, drop Commercial
+          keptProperties = prev.propertySizes.filter(p => p.type === "Residential");
+        } else if (value === "Commercial" && prevType === "Residential + Commercial") {
+          // Keep only Commercial properties, drop Residential
+          keptProperties = prev.propertySizes.filter(p => p.type === "Commercial");
+        } else if (value === "Residential + Commercial" && prevType === "Residential") {
+          // Keep existing Residential properties, add a blank Commercial
+          keptProperties = [
+            ...prev.propertySizes.filter(p => p.type === "Residential"),
+            {
+              type: "Commercial",
+              size: "N/A",
+              category: "N/A",
+              floor: "",
+              sqft: "",
+              sqyd: "",
+              basicRate: "",
+              aecAuda: "",
+              selldedAmount: "",
+              regularPrice: "",
+              boxPrice: "",
+              maintenance: "",
+              maintenanceDeposit: "",
+              plc: "",
+              frc: "",
+            }
+          ];
+        } else if (value === "Residential + Commercial" && prevType === "Commercial") {
+          // Keep existing Commercial properties, add a blank Residential
+          keptProperties = [
+            {
+              type: "Residential",
+              size: "",
+              category: "",
+              floor: "",
+              sqft: "",
+              sqyd: "",
+              basicRate: "",
+              aecAuda: "",
+              selldedAmount: "",
+              regularPrice: "",
+              boxPrice: "",
+              maintenance: "",
+              maintenanceDeposit: "",
+              plc: "",
+              frc: "",
+            },
+            ...prev.propertySizes.filter(p => p.type === "Commercial"),
+          ];
+        }
+
+        const newData = { 
+          ...prev, 
+          [name]: value, 
+          propertySizes: keptProperties,
+          // Clear all floor height fields
+          clearFloorHeight: "",
+          clearFloorHeightRetail: "",
+          clearFloorHeightFlats: "",
+          clearFloorHeightOffices: "",
+        };
+
+        // If we already have kept properties, return early
+        if (keptProperties.length > 0) {
+          return newData;
+        }
+        
+        // Auto-add first property based on type (fresh start for unrelated transitions)
+        if (value === "Residential + Commercial") {
+          // Add one Residential and one Commercial property
+          return {
+            ...newData,
+            propertySizes: [
+              {
+                type: "Residential",
+                size: "",
+                category: "",
+                floor: "",
+                sqft: "",
+                sqyd: "",
+                basicRate: "",
+                aecAuda: "",
+                selldedAmount: "",
+                regularPrice: "",
+                boxPrice: "",
+                maintenance: "",
+                maintenanceDeposit: "",
+                plc: "",
+                frc: "",
+              },
+              {
+                type: "Commercial",
+                size: "N/A",
+                category: "N/A",
+                floor: "",
+                sqft: "",
+                sqyd: "",
+                basicRate: "",
+                aecAuda: "",
+                selldedAmount: "",
+                regularPrice: "",
+                boxPrice: "",
+                maintenance: "",
+                maintenanceDeposit: "",
+                plc: "",
+                frc: "",
+              }
+            ]
+          };
+        } else if (value === "Plot") {
+          // Add one Plot property
+          return {
+            ...newData,
+            propertySizes: [
+              {
+                type: "Plot",
+                size: "N/A",
+                category: "N/A",
+                floor: "",
+                sqft: "",
+                sqyd: "",
+                basicRate: "",
+                aecAuda: "",
+                selldedAmount: "",
+                regularPrice: "",
+                boxPrice: "",
+                maintenance: "",
+                maintenanceDeposit: "",
+                plc: "",
+                frc: "",
+              }
+            ]
+          };
+        } else {
+          // Add one property of the selected type (Residential or Commercial)
+          return {
+            ...newData,
+            propertySizes: [
+              {
+                type: value,
+                size: value === "Commercial" ? "N/A" : "",
+                category: value === "Commercial" ? "N/A" : "",
+                floor: "",
+                sqft: "",
+                sqyd: "",
+                basicRate: "",
+                aecAuda: "",
+                selldedAmount: "",
+                regularPrice: "",
+                boxPrice: "",
+                maintenance: "",
+                maintenanceDeposit: "",
+                plc: "",
+                frc: "",
+              }
+            ]
+          };
+        }
+      });
+      return;
+    }
+    
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  }, []);
+
+  const handlePhoneChange = useCallback((e) => {
+    const value = e.target.value.replace(/\D/g, "").slice(0, 10);
+    setFormData((prev) => ({ ...prev, officePersonNumber: value }));
+  }, []);
+
+  const handlePropertyChange = useCallback((index, e) => {
     const { name, value } = e.target;
     setFormData((prev) => {
       const updated = [...prev.propertySizes];
+      
+      // Auto-calculate sqyd from sqft (divide by 9)
+      if (name === "sqft" && value) {
+        // Use regex to find all numbers in the string and convert them
+        const convertedValue = value.replace(/\d+\.?\d*/g, (match) => {
+          const num = parseFloat(match);
+          if (!isNaN(num) && num > 0) {
+            return (num / 9).toFixed(2);
+          }
+          return match;
+        });
+        
+        updated[index] = { 
+          ...updated[index], 
+          sqft: value,
+          sqyd: convertedValue
+        };
+        return { ...prev, propertySizes: updated };
+      }
+      
+      // Auto-calculate sqft from sqyd (multiply by 9)
+      if (name === "sqyd" && value) {
+        // Use regex to find all numbers in the string and convert them
+        const convertedValue = value.replace(/\d+\.?\d*/g, (match) => {
+          const num = parseFloat(match);
+          if (!isNaN(num) && num > 0) {
+            return (num * 9).toFixed(2);
+          }
+          return match;
+        });
+        
+        updated[index] = { 
+          ...updated[index], 
+          sqyd: value,
+          sqft: convertedValue
+        };
+        return { ...prev, propertySizes: updated };
+      }
+      
+      // Default behavior for other fields
       updated[index] = { ...updated[index], [name]: value };
       return { ...prev, propertySizes: updated };
     });
-  };
+  }, []);
 
   // 🏗️ Add new property block
   const addPropertySize = (type = formData.developmentType) => {
-    setFormData((prev) => ({
-      ...prev,
-      propertySizes: [
-        ...prev.propertySizes,
-        {
-          type,
-          size: "",
-          floor: "",
-          sqft: "",
-          aecAuda: "",
-          selldedAmount: "",
-          regularPrice: "",
-          boxPrice: "",
-          downPayment: "",
-          maintenance: "",
-        },
-      ],
-    }));
+    setFormData((prev) => {
+      // Find the first property of the same type to copy values from
+      let prefillValues = {
+        basicRate: "",
+        aecAuda: "",
+        selldedAmount: "",
+        maintenance: "",
+        maintenanceDeposit: "",
+        plc: "",
+        frc: "",
+      };
+      
+      // Look for existing property of the same type with filled values
+      const firstSameType = prev.propertySizes.find(prop => 
+        prop.type === type && 
+        (prop.basicRate || prop.aecAuda || prop.selldedAmount || prop.maintenance || prop.maintenanceDeposit || prop.plc || prop.frc)
+      );
+      
+      if (firstSameType) {
+        prefillValues = {
+          basicRate: firstSameType.basicRate || "",
+          aecAuda: firstSameType.aecAuda || "",
+          selldedAmount: firstSameType.selldedAmount || "",
+          maintenance: firstSameType.maintenance || "",
+          maintenanceDeposit: firstSameType.maintenanceDeposit || "",
+          plc: firstSameType.plc || "",
+          frc: firstSameType.frc || "",
+        };
+      }
+      
+      return {
+        ...prev,
+        propertySizes: [
+          ...prev.propertySizes,
+          {
+            type,
+            size: type === "Plot" ? "N/A" : "",
+            category: type === "Plot" ? "N/A" : "",
+            floor: "",
+            sqft: "",
+            sqyd: "",
+            basicRate: prefillValues.basicRate,
+            aecAuda: prefillValues.aecAuda,
+            selldedAmount: prefillValues.selldedAmount,
+            regularPrice: "",
+            boxPrice: "",
+            maintenance: prefillValues.maintenance,
+            maintenanceDeposit: prefillValues.maintenanceDeposit,
+            plc: prefillValues.plc,
+            frc: prefillValues.frc,
+          },
+        ],
+      };
+    });
   };
 
-  const removePropertySize = (index) => {
+  const removePropertySize = (index, type) => {
+    // Show confirmation dialog
+    const confirmed = window.confirm(
+      `Are you sure you want to delete this ${type} property?\n\nAll entered data for this property will be lost.`
+    );
+    
+    if (!confirmed) {
+      return; // User cancelled, don't remove
+    }
+    
     setFormData((prev) => ({
       ...prev,
       propertySizes: prev.propertySizes.filter((_, i) => i !== index),
@@ -133,23 +556,25 @@ const BuilderVisitForm = () => {
           ? p.floor
             ? "Commercial"
             : "Residential"
+          : app.developmentType === "Plot"
+          ? "Plot"
           : app.developmentType),
-      // 🪄 Format commas where needed
-      boxPrice: p.boxPrice ? Number(p.boxPrice).toLocaleString("en-IN") : "",
-      downPayment: p.downPayment
-        ? Number(p.downPayment).toLocaleString("en-IN")
-        : "",
+      // Keep boxPrice as-is (can contain text like "1.5 Cr")
+      boxPrice: p.boxPrice || "",
     }));
 
     setFormData({
       ...app,
       propertySizes: formattedPropertySizes,
+      executives: Array.isArray(app.executives) && app.executives.length > 0
+        ? app.executives
+        : [],
+      usps: Array.isArray(app.usps) ? app.usps : [], // Ensure usps is an array
       avgAgreementValue: app.avgAgreementValue
         ? Number(app.avgAgreementValue).toLocaleString("en-IN")
         : "",
-      boxPrice: app.boxPrice
-        ? Number(app.boxPrice).toLocaleString("en-IN")
-        : "",
+      // Keep boxPrice as-is (can contain text like "1.5 Cr")
+      boxPrice: app.boxPrice || "",
     });
 
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -157,75 +582,421 @@ const BuilderVisitForm = () => {
   // --- FORM SUBMIT / UPDATE ---
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Prevent multiple submissions
+    if (isSubmitting) {
+      console.log("Form is already submitting, ignoring duplicate click");
+      return;
+    }
+    
+    // Validate development type is selected
+    if (!formData.developmentType) {
+      console.warn("Validation failed: Type of Development not selected");
+      scrollToField("developmentType");
+      return;
+    }
+    
+    // Validate Stage of Construction
+    if (!formData.stageOfConstruction) {
+      console.warn("Validation failed: Stage of Construction not selected");
+      scrollToField("stageOfConstruction");
+      return;
+    }
+    
+    // Validate Project Loan Awail
+    if (!formData.financingRequirements) {
+      console.warn("Validation failed: Project Loan Awail not selected");
+      scrollToField("financingRequirements");
+      return;
+    }
+    
+    // Validate Enquiry Type
+    if (!formData.enquiryType) {
+      console.warn("Validation failed: Enquiry Type not selected");
+      scrollToField("enquiryType");
+      return;
+    }
+    
+    // Validate Remark
+    if (!formData.remark || formData.remark.trim() === "") {
+      console.warn("Validation failed: Remark is empty");
+      scrollToField("remark");
+      return;
+    }
+    
+    // Validate Total Amenities
+    if (!formData.totalAmenities || formData.totalAmenities === "") {
+      console.warn("Validation failed: Total Amenities is empty");
+      scrollToField("totalAmenities");
+      return;
+    }
+    
+    // Validate Area Type
+    if (!formData.areaType) {
+      console.warn("Validation failed: Area Type not selected");
+      scrollToField("areaType");
+      return;
+    }
+    
+    // Validate PLC and FRC for all properties
+    for (let i = 0; i < formData.propertySizes.length; i++) {
+      const prop = formData.propertySizes[i];
+      if (!prop.plc) {
+        console.warn(`Validation failed: PLC not selected for Property ${i + 1}`);
+        scrollToField("plc", i);
+        return;
+      }
+      if (!prop.frc) {
+        console.warn(`Validation failed: FRC not selected for Property ${i + 1}`);
+        scrollToField("frc", i);
+        return;
+      }
+    }
+    
+    if (formData.officePersonNumber && !/^\d{10}$/.test(formData.officePersonNumber)) {
+      console.warn("Validation failed: Invalid phone number");
+      return;
+    }
+    
+    // Set submitting state to disable button and show loading
+    setIsSubmitting(true);
+    
     try {
       const cleanPropertySizes = formData.propertySizes.map((p) => ({
         ...p,
         regularPrice: (p.regularPrice || "").replace(/,/g, ""),
-        downPayment: (p.downPayment || "").replace(/,/g, ""),
         maintenance: (p.maintenance || "").replace(/,/g, ""),
-        boxPrice: (p.boxPrice || "").replace(/,/g, ""),
+        maintenanceDeposit: (p.maintenanceDeposit || "").replace(/,/g, ""),
+        // Keep boxPrice as-is (can contain text like "1.5 Cr")
+        boxPrice: p.boxPrice || "",
       }));
 
       const cleanData = {
         ...formData,
         avgAgreementValue: (formData.avgAgreementValue || "").replace(/,/g, ""),
-        boxPrice: (formData.boxPrice || "").replace(/,/g, ""),
+        // Keep boxPrice as-is (can contain text like "1.5 Cr")
+        boxPrice: formData.boxPrice || "",
         propertySizes: cleanPropertySizes,
+        submittedAt: editingId ? formData.submittedAt : new Date().toISOString(), // Preserve original submission timestamp on edit
       };
 
+      // Debug: Log to verify data structure including clear floor height
+      console.log("Submitting data:", cleanData);
+      console.log("Clear Floor Height fields:", {
+        clearFloorHeight: cleanData.clearFloorHeight,
+        clearFloorHeightRetail: cleanData.clearFloorHeightRetail,
+        clearFloorHeightFlats: cleanData.clearFloorHeightFlats,
+        clearFloorHeightOffices: cleanData.clearFloorHeightOffices,
+      });
+
+      // Reset approvals on edit/submit so both levels require re-approval
+      cleanData.approval = {
+        level1: { status: "Pending", by: "", at: "", remarks: "" },
+        level2: { status: "Pending", by: "", at: "", remarks: "" },
+      };
+
+      const isEditing = !!editingId;
+      
       if (editingId) {
-        await axios.patch(`${API}/${editingId}`, cleanData);
-        alert("✅ Data updated successfully!");
+        // Wait for backend to complete update (with 20 second timeout)
+        await axios.patch(`${API}/${editingId}`, cleanData, { 
+          timeout: 20000,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        // Clear editing state and reset form after successful update
         setEditingId(null);
+        setFormData(initialForm);
+        setEmailSent(false);
+        
+        // Fetch updated visits list
+        await fetchVisits();
       } else {
-        await axios.post(API, cleanData);
-        alert("✅ Form submitted successfully!");
+        // New submission - save to database first and wait for response (with 20 second timeout)
+        console.log("Sending POST request to:", API);
+        
+        // Start the POST request but don't wait for it
+        const postPromise = axios.post(API, cleanData, { 
+          timeout: 20000,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        // Start polling for new data immediately (check every 2 seconds)
+        let dataFound = false;
+        const pollInterval = setInterval(async () => {
+          if (dataFound) return;
+          
+          console.log("Checking if data was saved...");
+          const beforeCount = visits.length;
+          await fetchVisits();
+          
+          // Check if new data appeared
+          setTimeout(() => {
+            const afterCount = visits.length;
+            if (afterCount > beforeCount && !dataFound) {
+              dataFound = true;
+              clearInterval(pollInterval);
+              
+              // Data found! Hide loader
+              setIsSubmitting(false);
+              
+              // Reset form
+              setFormData(initialForm);
+              
+              // Send email notification in background
+              if (validateEmailConfig() && !emailSent) {
+                setEmailSending(true);
+                sendForm2Notification(cleanData)
+                  .then((emailResult) => {
+                    setEmailSending(false);
+                    if (emailResult.success) {
+                      setEmailSent(true);
+                      console.log("✅ Email notification sent successfully");
+                    } else {
+                      console.warn("⚠️ Email notification failed:", emailResult.message);
+                    }
+                  })
+                  .catch((emailError) => {
+                    console.error("❌ Email notification error:", emailError);
+                    setEmailSending(false);
+                  });
+              }
+            }
+          }, 300);
+        }, 2000); // Check every 2 seconds
+        
+        // Also wait for the actual response (in case it comes back)
+        try {
+          await postPromise;
+          
+          if (!dataFound) {
+            clearInterval(pollInterval);
+            dataFound = true;
+            
+            // Send email notification
+            if (validateEmailConfig() && !emailSent) {
+              setEmailSending(true);
+              sendForm2Notification(cleanData)
+                .then((emailResult) => {
+                  setEmailSending(false);
+                  if (emailResult.success) {
+                    setEmailSent(true);
+                    console.log("✅ Email notification sent successfully");
+                  } else {
+                    console.warn("⚠️ Email notification failed:", emailResult.message);
+                  }
+                })
+                .catch((emailError) => {
+                  console.error("❌ Email notification error:", emailError);
+                  setEmailSending(false);
+                });
+            }
+          }
+        } catch (postError) {
+          // If timeout or error, wait a bit for polling to find the data
+          if (postError.code === 'ECONNABORTED') {
+            console.warn("⚠️ Request timed out, waiting for polling to confirm save...");
+            
+            // Give polling 5 more seconds to find the data
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            
+            if (!dataFound) {
+              clearInterval(pollInterval);
+              throw new Error("Data was not saved. Please try again.");
+            }
+            // If dataFound is true, polling already handled success
+            return;
+          }
+          
+          clearInterval(pollInterval);
+          throw postError; // Re-throw other errors
+        }
+        
+        clearInterval(pollInterval);
       }
 
-      setFormData(initialForm);
-      fetchVisits();
+      // Reset form only after successful new submission (if not already reset by polling or edit)
+      if (!isEditing) {
+        setFormData(initialForm);
+        setEmailSent(false);
+      }
+      
+      // Fetch updated visits list (if not already fetched)
+      if (!isEditing) {
+        await fetchVisits();
+      }
+      
     } catch (err) {
       console.error("❌ Submit Error:", err);
-      alert("❌ Failed to submit form.");
+      console.error("Error details:", {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        statusText: err.response?.statusText,
+        config: {
+          url: err.config?.url,
+          method: err.config?.method,
+          timeout: err.config?.timeout
+        }
+      });
+      
+      // Log error but don't show alert
+      if (err.code === 'ECONNABORTED') {
+        console.error("❌ Request timeout: The server is taking too long to respond.");
+      } else if (err.response) {
+        console.error("❌ Backend error:", err.response.data);
+      } else if (err.request) {
+        console.error("❌ Network error: Unable to reach server.");
+      } else {
+        console.error("❌ Error:", err.message);
+      }
+    } finally {
+      // Always re-enable the submit button after completion (success or failure)
+      setIsSubmitting(false);
     }
   };
 
   // 🔹 Approve Visit
-  const handleApprove = async (id) => {
-    const password = prompt("Enter approval password:");
+  const handleApprove = async (id, level = 1) => {
+    const password = prompt(`Enter approval password for Level ${level}:`);
     if (!password) return;
 
     try {
-      await axios.patch(`${API}/${id}/approve`, { password });
-      alert("✅ Application approved successfully!");
+      const response = await axios.patch(`${API}/${id}/approve`, { password, level });
+      
+      // ✅ Optimistically update local state immediately for instant UI update
+      const now = new Date().toISOString();
+      setVisits((prev) =>
+        prev.map((v) => {
+          if (v._id !== id) return v;
+          return {
+            ...v,
+            approval: {
+              ...v.approval,
+              [`level${level}`]: {
+                ...v.approval?.[`level${level}`],
+                status: "Approved",
+                at: now,
+              },
+            },
+          };
+        })
+      );
+
+      // If Level 2 approval successful, send email notification in background (non-blocking)
+      if (level === 2 && validateEmailConfig()) {
+        const approvedVisit = visits.find(v => v._id === id);
+        
+        if (approvedVisit) {
+          const emailData = {
+            projectName: approvedVisit.projectName,
+            groupName: approvedVisit.groupName,
+            builderName: approvedVisit.builderName,
+            location: approvedVisit.location,
+            developmentType: approvedVisit.developmentType,
+            totalUnitsBlocks: approvedVisit.totalUnitsBlocks,
+            remark: approvedVisit.remark,
+            approvedBy: "Admin",
+            level1Status: approvedVisit.approval?.level1?.status,
+            level1By: approvedVisit.approval?.level1?.by,
+            level1At: approvedVisit.approval?.level1?.at,
+          };
+          
+          sendLevel2ApprovalNotification(emailData)
+            .then((emailResult) => {
+              if (emailResult.success) {
+                console.log(`✅ Level ${level} approval email sent successfully`);
+              } else {
+                console.warn(`⚠️ Level ${level} approval email failed:`, emailResult.message);
+              }
+            })
+            .catch((emailError) => {
+              console.error("❌ Level 2 approval email error:", emailError);
+            });
+        }
+      }
+
+      // Sync with server in background
       fetchVisits();
     } catch (err) {
       console.error("❌ Approval failed:", err);
       if (err.response && err.response.status === 401) {
         alert("Invalid password!");
       } else {
-        alert("Approval failed. Try again.");
+        console.error("Approval error:", err.response?.data?.error || "Approval failed");
       }
     }
   };
 
-  // 🔹 Reject Visit
-  const handleReject = async (id) => {
-    const password = prompt("Enter approval password:");
+  // 🔹 Open rejection modal
+  const handleRejectWithRemarks = (id, level = 1) => {
+    setRejectionModal({
+      isOpen: true,
+      visitId: id,
+      level: level,
+      remarks: ""
+    });
+  };
+
+  // 🔹 Confirm rejection with remarks
+  const confirmRejection = async (remarks) => {
+    // Validate remarks are not empty or whitespace-only
+    const trimmedRemarks = remarks.trim();
+    if (!trimmedRemarks) {
+      console.warn("Rejection failed: Remarks cannot be empty");
+      return;
+    }
+
+    const password = prompt(`Enter approval password to reject Level ${rejectionModal.level}:`);
     if (!password) return;
 
     try {
-      await axios.patch(`${API}/${id}/reject`, { password });
-      alert("❌ Application rejected successfully!");
+      // Call API with password, level, and comment (backend expects 'comment' not 'remarks')
+      await axios.patch(`${API}/${rejectionModal.visitId}/reject`, {
+        password,
+        level: rejectionModal.level,
+        comment: trimmedRemarks
+      });
+      
+      // Close modal and refresh visits on success
+      setRejectionModal({
+        isOpen: false,
+        visitId: null,
+        level: null,
+        remarks: ""
+      });
+      
       fetchVisits();
     } catch (err) {
       console.error("❌ Rejection failed:", err);
+      
+      // Display error message on validation failure
       if (err.response && err.response.status === 401) {
-        alert("Invalid password!");
+        alert("❌ Invalid password!");
       } else {
-        alert("Rejection failed. Try again.");
+        console.error("Rejection error:", err.response?.data?.error || "Rejection failed");
       }
     }
+  };
+
+  // 🔹 Cancel rejection modal
+  const cancelRejection = () => {
+    setRejectionModal({
+      isOpen: false,
+      visitId: null,
+      level: null,
+      remarks: ""
+    });
+  };
+
+  // 🔹 Reject Visit (legacy - kept for backward compatibility)
+  const handleReject = (id, level = 1) => {
+    // Replace direct API call with handleRejectWithRemarks call
+    handleRejectWithRemarks(id, level);
   };
 
   // 🔹 Export Excel
@@ -249,8 +1020,37 @@ const BuilderVisitForm = () => {
       link.click();
       link.remove();
     } catch (err) {
-      console.error(err);
-      alert(err.response?.data?.error || "Download failed");
+      console.error("Excel download failed:", err);
+      console.error("Error:", err.response?.data?.error || "Download failed");
+    }
+  };
+
+  // 🔒 Verify Level 2 password for "All Properties" view
+  const handleVerifyPassword = async () => {
+    if (!passwordInput.trim()) {
+      setPasswordError("Please enter the password.");
+      return;
+    }
+    setPasswordVerifying(true);
+    setPasswordError("");
+    try {
+      const res = await axios.post(
+        `${import.meta.env.VITE_API_URL}/api/verify-level2-password`,
+        { key: "APPROVE_LEVEL2_PASSWORD", password: passwordInput }
+      );
+      // Store session token in memory only
+      sessionTokenRef.current = res.data?.token || "verified";
+      setShowAllCards(true);
+      setShowPasswordModal(false);
+      setPasswordInput("");
+    } catch (err) {
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        setPasswordError("Incorrect Approval Password.");
+      } else {
+        setPasswordError("Verification failed. Please try again.");
+      }
+    } finally {
+      setPasswordVerifying(false);
     }
   };
 
@@ -260,6 +1060,21 @@ const BuilderVisitForm = () => {
   return (
     <div className="form-container">
       <h2 className="form-title">Project Login Form</h2>
+      
+      {/* Submission Loading Modal */}
+      <SubmissionLoader isVisible={isSubmitting} isEditing={!!editingId} />
+      
+      {/* Email Sending Indicator */}
+      <EmailSendingIndicator isVisible={emailSending} />
+      
+      {/* Rejection Modal */}
+      <RejectionModal
+        isOpen={rejectionModal.isOpen}
+        onConfirm={confirmRejection}
+        onCancel={cancelRejection}
+        level={rejectionModal.level}
+      />
+      
       <form
         onSubmit={handleSubmit}
         onKeyDown={(e) => {
@@ -273,64 +1088,270 @@ const BuilderVisitForm = () => {
       >
         <div className="form-grid">
           <label>
-            Builder Name:
-            <input
-              placeholder="Enter Builder Name"
-              type="text"
-              name="builderName"
-              value={formData.builderName}
-              onChange={handleChange}
-              required
-            />
-          </label>
-
-          <label>
-            Group Name:
+           Developer Group Name:<span className="required-asterisk">*</span>
             <input
               type="text"
               placeholder="Enter Group Name"
               name="groupName"
               value={formData.groupName}
               onChange={handleChange}
+              required
             />
           </label>
 
           <label>
-            Project Name:
+            Project Name:<span className="required-asterisk">*</span>
             <input
               type="text"
               placeholder="Enter Project Name"
               name="projectName"
               value={formData.projectName}
               onChange={handleChange}
+              required
+            />
+          </label>
+          <label>
+            Developer Name:
+            <input
+              placeholder="Enter Builder Name"
+              type="text"
+              name="builderName"
+              value={formData.builderName}
+              onChange={handleChange}
             />
           </label>
 
           <label>
-            Location/Address:
+            Developer Number:
+            <input
+              placeholder="Enter Developer Number"
+              type="tel"
+              name="builderNumber"
+              value={formData.builderNumber}
+              onChange={(e) => {
+                const value = e.target.value.replace(/\D/g, "").slice(0, 10);
+                setFormData((prev) => ({ ...prev, builderNumber: value }));
+              }}
+              inputMode="numeric"
+              pattern="\d{10}"
+              maxLength={10}
+            />
+          </label>
+
+          <label>
+            Location/Address:<span className="required-asterisk">*</span>
             <input
               type="text"
               placeholder="Enter Location"
               name="location"
               value={formData.location}
               onChange={handleChange}
+              required
             />
           </label>
 
           <label className="full-width">
-            Developer Office Person Details:
+            Developer Office Person Details:<span className="required-asterisk">*</span>
             <input
               type="text"
-              placeholder="Name, Designation, Contact"
+              placeholder="Name, Designation"
               name="officePersonDetails"
               value={formData.officePersonDetails}
               onChange={handleChange}
+              required
             />
           </label>
+          <label>
+            Developer Office Person Number:<span className="required-asterisk">*</span>
+            <input
+              type="tel"
+              placeholder="Enter Mobile number"
+              name="officePersonNumber"
+              value={formData.officePersonNumber}
+              onChange={handlePhoneChange}
+              inputMode="numeric"
+              pattern="\d{10}"
+              maxLength={10}
+              required
+            />
+          </label>
+
+          {/* -------------------- EXECUTIVES SECTION -------------------- */}
+          <div className="full-width" style={{ gridColumn: "span 2", marginBottom: "20px" }}>
+            <label style={{ 
+              display: "block", 
+              marginBottom: "10px",
+              fontWeight: "500",
+              fontSize: "14px"
+            }}>
+              Executive Name & Number:
+            </label>
+            
+            {formData.executives && formData.executives.length > 0 ? (
+              <div style={{ 
+                border: "1px solid #ddd", 
+                padding: "15px", 
+                borderRadius: "8px",
+                backgroundColor: "#f9f9f9"
+              }}>
+                {formData.executives.map((exec, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr auto",
+                      gap: "12px",
+                      marginBottom: index < formData.executives.length - 1 ? "12px" : "0",
+                      alignItems: "center",
+                      padding: "10px",
+                      backgroundColor: "white",
+                      borderRadius: "6px",
+                      border: "1px solid #e0e0e0"
+                    }}
+                  >
+                    <div>
+                      <input
+                        type="text"
+                        placeholder="Executive Name"
+                        value={exec.name || ""}
+                        onChange={(e) => {
+                          const updated = [...(formData.executives || [])];
+                          updated[index] = {
+                            ...updated[index],
+                            name: e.target.value,
+                          };
+                          setFormData((prev) => ({
+                            ...prev,
+                            executives: updated,
+                          }));
+                        }}
+                        style={{ 
+                          width: "100%",
+                          padding: "10px",
+                          border: "1px solid #ccc",
+                          borderRadius: "4px",
+                          fontSize: "14px"
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <input
+                        type="tel"
+                        placeholder="Executive Number (10 digits)"
+                        value={exec.number || ""}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, "").slice(0, 10);
+                          const updated = [...(formData.executives || [])];
+                          updated[index] = {
+                            ...updated[index],
+                            number: value,
+                          };
+                          setFormData((prev) => ({
+                            ...prev,
+                            executives: updated,
+                          }));
+                        }}
+                        inputMode="numeric"
+                        maxLength={10}
+                        style={{ 
+                          width: "100%",
+                          padding: "10px",
+                          border: "1px solid #ccc",
+                          borderRadius: "4px",
+                          fontSize: "14px"
+                        }}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = formData.executives.filter(
+                          (_, i) => i !== index
+                        );
+                        setFormData((prev) => ({
+                          ...prev,
+                          executives: updated,
+                        }));
+                      }}
+                      style={{
+                        padding: "10px 16px",
+                        backgroundColor: "#dc3545",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                        fontWeight: "500",
+                        transition: "background-color 0.2s",
+                        whiteSpace: "nowrap"
+                      }}
+                      onMouseOver={(e) => e.target.style.backgroundColor = "#c82333"}
+                      onMouseOut={(e) => e.target.style.backgroundColor = "#dc3545"}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const updated = [...(formData.executives || [])];
+                    updated.push({ name: "", number: "" });
+                    setFormData((prev) => ({ ...prev, executives: updated }));
+                  }}
+                  style={{
+                    padding: "10px 20px",
+                    backgroundColor: "#28a745",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    marginTop: "12px",
+                    fontSize: "14px",
+                    fontWeight: "500",
+                    transition: "background-color 0.2s",
+                    width: "100%"
+                  }}
+                  onMouseOver={(e) => e.target.style.backgroundColor = "#218838"}
+                  onMouseOut={(e) => e.target.style.backgroundColor = "#28a745"}
+                >
+                  + Add Another Executive
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setFormData((prev) => ({ 
+                    ...prev, 
+                    executives: [{ name: "", number: "" }] 
+                  }));
+                }}
+                style={{
+                  padding: "12px 24px",
+                  backgroundColor: "#007bff",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  fontWeight: "500",
+                  transition: "background-color 0.2s",
+                  boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
+                }}
+                onMouseOver={(e) => e.target.style.backgroundColor = "#0056b3"}
+                onMouseOut={(e) => e.target.style.backgroundColor = "#007bff"}
+              >
+                + Add Executive
+              </button>
+            )}
+          </div>
+
           {/* -------------------- DEVELOPMENT TYPE -------------------- */}
           <div className="radio-group full-width">
-            <p className="radio-label">Type of Development:</p>
-            {["Residential", "Commercial", "Residential + Commercial"].map(
+            <p className="radio-label">Type of Development:<span className="required-asterisk">*</span></p>
+            {["Residential", "Commercial", "Residential + Commercial", "Plot"].map(
               (type) => (
                 <label key={type}>
                   <input
@@ -347,129 +1368,394 @@ const BuilderVisitForm = () => {
           </div>
 
           {/* -------------------- PROPERTY SECTION (SHARED TEMPLATE) -------------------- */}
-          {["Residential", "Commercial"]
+          {["Residential", "Commercial", "Plot"]
             .filter(
-              (type) =>
-                formData.developmentType === type ||
-                formData.developmentType === "Residential + Commercial"
+              (type) => {
+                // For "Residential + Commercial", only show Residential and Commercial (not Plot)
+                if (formData.developmentType === "Residential + Commercial") {
+                  return type === "Residential" || type === "Commercial";
+                }
+                // For other types, show only the selected type
+                return formData.developmentType === type;
+              }
             )
-            .map((type) => (
-              <div key={type} className="property-section">
-                <h3 className="section-title">
-                  {type === "Residential" ? "🏠 Residential" : "🏢 Commercial"}{" "}
-                  Properties
-                </h3>
+            .map((type) => {
+              // Filter properties of this type
+              const propertiesOfType = formData.propertySizes.filter(p => p.type === type);
+              
+              return (
+                <div key={type} className="property-section">
+                  <h3 className="section-title">
+                    {type === "Residential" ? "🏠 Residential" : type === "Commercial" ? "🏢 Commercial" : "📐 Plot"}{" "}
+                    Properties
+                  </h3>
 
-                {formData.propertySizes.map((prop, index) => {
-                  if (prop.type !== type) return null; // Only render matching type
+                  {propertiesOfType.length > 0 ? (
+                    <>
+                      {formData.propertySizes.map((prop, index) => {
+                        if (prop.type !== type) return null; // Only render matching type
+                        
+                        // Calculate the correct property number for this type
+                        const typeIndex = formData.propertySizes
+                          .slice(0, index)
+                          .filter(p => p.type === type).length + 1;
 
-                  return (
-                    <div key={index} className="conditional-fields">
-                      <h4>
-                        {type} Property Type {index + 1}
-                      </h4>
+                        return (
+                          <div key={index} className="conditional-fields">
+                            <div style={{ 
+                              display: "flex", 
+                              justifyContent: "space-between", 
+                              alignItems: "center",
+                              marginBottom: "15px"
+                            }}>
+                              <h4 style={{ margin: 0 }}>
+                                {type} Property {typeIndex}
+                              </h4>
+                              
+                              {/* Remove button - only show if more than 1 property of this type */}
+                              {propertiesOfType.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => removePropertySize(index, type)}
+                                  style={{
+                                    padding: "8px 16px",
+                                    backgroundColor: "#dc3545",
+                                    color: "white",
+                                    border: "none",
+                                    borderRadius: "6px",
+                                    cursor: "pointer",
+                                    fontSize: "14px",
+                                    fontWeight: "500",
+                                    transition: "background-color 0.2s",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "6px"
+                                  }}
+                                  onMouseOver={(e) => e.target.style.backgroundColor = "#c82333"}
+                                  onMouseOut={(e) => e.target.style.backgroundColor = "#dc3545"}
+                                >
+                                  <span style={{ fontSize: "16px" }}>🗑️</span>
+                                  Remove Property
+                                </button>
+                              )}
+                            </div>
 
-                      {/* Unique field per type */}
-                      {type === "Residential" ? (
-                        <label>
-                          Size:
-                          <select
-                            name="size"
-                            value={prop.size}
-                            onChange={(e) => handlePropertyChange(index, e)}
-                          >
-                            <option value="">Select</option>
-                            <option>2 BHK</option>
-                            <option>3 BHK</option>
-                            <option>3 BHK (PentHouse)</option>
-                            <option>4 BHK</option>
-                            <option>4 BHK (PentHouse)</option>
-                            <option>5 BHK</option>
-                            <option>5 BHK (PentHouse)</option>
-                          </select>
-                        </label>
-                      ) : (
-                        <label>
-                          Floor:
-                          <select
-                            name="floor"
-                            value={prop.floor}
-                            onChange={(e) => handlePropertyChange(index, e)}
-                          >
-                            <option value="">Select</option>
-                            <option>Ground Floor</option>
-                            <option>1st Floor</option>
-                            <option>2nd Floor</option>
-                            <option>Office</option>
-                          </select>
-                        </label>
-                      )}
-                      {[
-                        ["sqft", "SQ.FT/YD"],
-                        ["aecAuda", "AEC / AUDA"],
-                        ["maintenance", "Maintenance"],
-                        ["selldedAmount", "SaleDeed Amount"],
-                        ["boxPrice", "Box Price"],
-                        ["downPayment", "Down Payment"],
-                      ].map(([name, label]) => (
-                        <label key={name}>
-                          {label}:
-                          <input
-                            type="text"
-                            name={name}
-                            placeholder={`Enter ${label}`}
-                            value={prop[name]}
-                            onChange={(e) => {
-                              let value = e.target.value;
+                            {/* Unique field per type */}
+                            {type === "Residential" && (
+                              <div className="size-category-row">
+                                <label>
+                                  Size:<span className="required-asterisk">*</span>
+                                  <select
+                                    name="size"
+                                    value={prop.size}
+                                    onChange={(e) => handlePropertyChange(index, e)}
+                                    required
+                                  >
+                                    <option value="">Select</option>
+                                    <option>2 BHK </option>
+                                    <option>3 BHK </option>
+                                    <option>4 BHK </option>
+                                    <option>5 BHK </option>
+                                    <option>6 BHK </option>
+                                    <option>7 BHK </option>
+                                  </select>
+                                </label>
+                                <label>
+                                  Category:<span className="required-asterisk">*</span>
+                                  <select
+                                    name="category"
+                                    value={prop.category}
+                                    onChange={(e) => handlePropertyChange(index, e)}
+                                    required
+                                  >
+                                    <option value="">Select</option>
+                                    <option>Flats</option>
+                                    <option>Bunglow</option>
+                                    <option>PentHouse</option>
+                                    <option>Duplex</option>
+                                    <option>Duplex PentHouse</option>
+                                    <option>Triplex</option>
+                                    <option>Triplex PentHouse</option>
+                                    <option>Weekend Villa</option>
+                                  </select>
+                                </label>
+                              </div>
+                            )}
+                            {type === "Commercial" && (
+                              <>
+                                <label>
+                                  Floor:<span className="required-asterisk">*</span>
+                                  <select
+                                    name="floor"
+                                    value={prop.floor === "Other" || (prop.floor && !["Ground Floor", "1st Floor", "2nd Floor", "Office"].includes(prop.floor)) ? "Other" : prop.floor}
+                                    onChange={(e) => {
+                                      if (e.target.value === "Other") {
+                                        handlePropertyChange(index, { target: { name: "floor", value: "Other" } });
+                                      } else {
+                                        handlePropertyChange(index, e);
+                                      }
+                                    }}
+                                    required
+                                  >
+                                    <option value="">Select</option>
+                                    <option>Ground Floor</option>
+                                    <option>1st Floor</option>
+                                    <option>2nd Floor</option>
+                                    <option>Office</option>
+                                    <option value="Other">Other</option>
+                                  </select>
+                                </label>
+                                
+                                {(prop.floor === "Other" || (prop.floor && !["Ground Floor", "1st Floor", "2nd Floor", "Office", ""].includes(prop.floor))) && (
+                                  <label>
+                                    Custom Floor Name:<span className="required-asterisk">*</span>
+                                    <input
+                                      type="text"
+                                      name="floor"
+                                      placeholder="Enter custom floor name"
+                                      value={prop.floor === "Other" ? "" : prop.floor}
+                                      onChange={(e) => handlePropertyChange(index, e)}
+                                      required
+                                      style={{
+                                        marginTop: "10px",
+                                        borderColor: "#1976d2"
+                                      }}
+                                    />
+                                  </label>
+                                )}
+                              </>
+                            )}
+                            {[
+                              ["sqft", "SQ.FT", "Enter SQ.FT (auto-fills VAR)"],
+                              ["sqyd", "VAR", "Enter VAR (auto-fills SQ.FT)"],
+                              ["basicRate", "Basic Rate", "Enter Basic Rate"],
+                              ["aecAuda", "AMC & Torrent", "Enter AMC & Torrent"],
+                              ["maintenance", "Running Maintenance", "Enter Running Maintenance"],
+                              ["maintenanceDeposit", "Maintenance Deposit", "Enter Maintenance Deposit"],
+                              ["selldedAmount", "SaleDeed Amount", "Enter SaleDeed Amount"],
+                              ["boxPrice", "Box Price", "Enter Box Price"],
+                            ].map(([name, label, placeholder]) => (
+                              <label key={name}>
+                                {label}:<span className="required-asterisk">*</span>
+                                <input
+                                  type="text"
+                                  name={name}
+                                  placeholder={placeholder}
+                                  value={prop[name]}
+                                  required
+                                  onChange={(e) => {
+                                    let value = e.target.value;
 
-                              // ✅ only apply comma formatting to selected fields
-                              if (["boxPrice", "downPayment"].includes(name)) {
-                                value = value.replace(/,/g, ""); // remove commas first
-                                if (!isNaN(value) && value !== "") {
-                                  const formattedValue =
-                                    Number(value).toLocaleString("en-IN");
-                                  handlePropertyChange(index, {
-                                    target: { name, value: formattedValue },
-                                  });
-                                  return;
-                                } else if (value === "") {
-                                  handlePropertyChange(index, {
-                                    target: { name, value: "" },
-                                  });
-                                  return;
-                                }
-                              }
+                                    // ✅ Box Price allows free-form text (e.g., "1.5 Cr", "2 Cr", etc.)
+                                    if (["boxPrice"].includes(name)) {
+                                      // Allow any text input for box price
+                                      handlePropertyChange(index, {
+                                        target: { name, value: value },
+                                      });
+                                      return;
+                                    }
 
-                              // 🧾 for sqft & aecAuda → plain update (no commas)
-                              handlePropertyChange(index, e);
-                            }}
-                          />
-                        </label>
-                      ))}
+                                    // 🧾 for sqft, sqyd & aecAuda → plain update (no commas)
+                                    handlePropertyChange(index, e);
+                                  }}
+                                />
+                              </label>
+                            ))}
 
-                      {/* {formData.propertySizes.length > 1 && (
-                        <button
-                          type="button"
-                          className="property-btn remove-btn"
-                          onClick={() => removePropertySize(index)}
-                        >
-                          Remove
-                        </button>
-                      )} */}
-                    </div>
-                  );
-                })}
+                            {/* PLC Radio Buttons */}
+                            <div className="radio-group" style={{ gridColumn: "span 1" }}>
+                              <p className="radio-label">PLC:<span className="required-asterisk">*</span></p>
+                              <label>
+                                <input
+                                  type="radio"
+                                  name={`plc-${index}`}
+                                  data-property-index={index}
+                                  value="Yes"
+                                  checked={prop.plc === "Yes"}
+                                  onChange={(e) =>
+                                    handlePropertyChange(index, {
+                                      target: { name: "plc", value: e.target.value },
+                                    })
+                                  }
+                                />
+                                Yes
+                              </label>
+                              <label>
+                                <input
+                                  type="radio"
+                                  name={`plc-${index}`}
+                                  data-property-index={index}
+                                  value="No"
+                                  checked={prop.plc === "No"}
+                                  onChange={(e) =>
+                                    handlePropertyChange(index, {
+                                      target: { name: "plc", value: e.target.value },
+                                    })
+                                  }
+                                />
+                                No
+                              </label>
+                            </div>
 
-                <button
-                  type="button"
-                  className="property-btn add-btn"
-                  onClick={() => addPropertySize(type)}
-                >
-                  Add {type} Property
-                </button>
-              </div>
-            ))}
+                            {/* FRC Radio Buttons */}
+                            <div className="radio-group" style={{ gridColumn: "span 1" }}>
+                              <p className="radio-label">FRC:<span className="required-asterisk">*</span></p>
+                              <label>
+                                <input
+                                  type="radio"
+                                  name={`frc-${index}`}
+                                  data-property-index={index}
+                                  value="Yes"
+                                  checked={prop.frc === "Yes"}
+                                  onChange={(e) =>
+                                    handlePropertyChange(index, {
+                                      target: { name: "frc", value: e.target.value },
+                                    })
+                                  }
+                                />
+                                Yes
+                              </label>
+                              <label>
+                                <input
+                                  type="radio"
+                                  name={`frc-${index}`}
+                                  data-property-index={index}
+                                  value="No"
+                                  checked={prop.frc === "No"}
+                                  onChange={(e) =>
+                                    handlePropertyChange(index, {
+                                      target: { name: "frc", value: e.target.value },
+                                    })
+                                  }
+                                />
+                                No
+                              </label>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      <button
+                        type="button"
+                        className="property-btn add-btn"
+                        onClick={() => addPropertySize(type)}
+                      >
+                        + Add Another {type} Property
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className="property-btn add-btn"
+                      onClick={() => addPropertySize(type)}
+                      style={{
+                        padding: "12px 24px",
+                        fontSize: "14px",
+                        fontWeight: "500"
+                      }}
+                    >
+                      + Add {type} Property
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          
+          {/* -------------------- AREA TYPE (FORM LEVEL) -------------------- */}
           <div className="radio-group full-width">
+            <p className="radio-label">Area Type:<span className="required-asterisk">*</span></p>
+            <label>
+              <input
+                type="radio"
+                name="areaType"
+                value="Super Built-up"
+                checked={formData.areaType === "Super Built-up"}
+                onChange={handleChange}
+              />
+              Super Built-up
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="areaType"
+                value="Carpet"
+                checked={formData.areaType === "Carpet"}
+                onChange={handleChange}
+              />
+              Carpet
+            </label>
+          </div>
+          
+          {/* -------------------- CLEAR FLOOR HEIGHT (DYNAMIC BASED ON DEVELOPMENT TYPE) -------------------- */}
+          {formData.developmentType === "Residential" && (
+            <label className="full-width">
+              Clear Floor Height:<span className="required-asterisk">*</span>
+              <input
+                type="text"
+                name="clearFloorHeight"
+                placeholder="Enter Clear Floor Height (e.g., 10 ft)"
+                value={formData.clearFloorHeight || ""}
+                onChange={handleChange}
+                required
+              />
+            </label>
+          )}
+
+          {formData.developmentType === "Residential + Commercial" && (
+            <>
+              <label>
+                Retail Clear Floor Height :<span className="required-asterisk">*</span>
+                <input
+                  type="text"
+                  name="clearFloorHeightRetail"
+                  placeholder="Enter Clear Floor Height for Retail"
+                  value={formData.clearFloorHeightRetail || ""}
+                  onChange={handleChange}
+                  required
+                />
+              </label>
+              <label>
+                Flats Clear Floor Height:<span className="required-asterisk">*</span>
+                <input
+                  type="text"
+                  name="clearFloorHeightFlats"
+                  placeholder="Enter Clear Floor Height for Flats"
+                  value={formData.clearFloorHeightFlats || ""}
+                  onChange={handleChange}
+                  required
+                />
+              </label>
+            </>
+          )}
+
+          {formData.developmentType === "Commercial" && (
+            <>
+              <label>
+                Retail Clear Floor Height:<span className="required-asterisk">*</span>
+                <input
+                  type="text"
+                  name="clearFloorHeightRetail"
+                  placeholder="Enter Clear Floor Height for Retail"
+                  value={formData.clearFloorHeightRetail || ""}
+                  onChange={handleChange}
+                  required
+                />
+              </label>
+              <label>
+                Offices Clear Floor Height:<span className="required-asterisk">*</span>
+                <input
+                  type="text"
+                  name="clearFloorHeightOffices"
+                  placeholder="Enter Clear Floor Height for Offices"
+                  value={formData.clearFloorHeightOffices || ""}
+                  onChange={handleChange}
+                  required
+                />
+              </label>
+            </>
+          )}
+          
+          {/* <div className="radio-group full-width">
             <p className="radio-label"> Price Negotiable:</p>
             <label>
               <input
@@ -491,54 +1777,76 @@ const BuilderVisitForm = () => {
               />
               No
             </label>
-          </div>
+          </div> */}
           <label>
-            Total Units & Blocks:
+            Total No. Units:<span className="required-asterisk">*</span>
             <input
-              placeholder=" Enter Total Units & Blocks"
+              placeholder=" Enter Total No. Units "
               type="text"
               name="totalUnitsBlocks"
               value={formData.totalUnitsBlocks}
               onChange={handleChange}
+              required
             />
           </label>
 
           <label>
-            Stage of Construction:
+            Total No. Blocks:<span className="required-asterisk">*</span>
             <input
-              placeholder=" Enter Stage of Construction"
+              placeholder="Enter Total No. Blocks"
               type="text"
-              name="stageOfConstruction"
-              value={formData.stageOfConstruction}
+              name="totalBlocks"
+              value={formData.totalBlocks}
               onChange={handleChange}
+              required
             />
           </label>
+
+          <div className="radio-group full-width">
+            <p className="radio-label">Stage of Construction:<span className="required-asterisk">*</span></p>
+            {["Under-Construction", "Ready to move", "Pre-launch"].map(
+              (stage) => (
+                <label key={stage}>
+                  <input
+                    type="radio"
+                    name="stageOfConstruction"
+                    value={stage}
+                    checked={formData.stageOfConstruction === stage}
+                    onChange={handleChange}
+                  />
+                  {stage}
+                </label>
+              )
+            )}
+          </div>
           {(formData.developmentType === "Residential" ||
             formData.developmentType === "Residential + Commercial") && (
             <label className="full-width">
-              Gentry:
+              Community:<span className="required-asterisk">*</span>
               <input
-                placeholder="Enter gentry"
+                placeholder="Enter Community"
                 type="text"
                 name="gentry"
                 value={formData.gentry}
                 onChange={handleChange}
+                required
               />
             </label>
           )}
 
           <label>
-            Expected Completion Month:
+            Expected Soft Possesion:<span className="required-asterisk">*</span>
             <input
               type="month"
               name="expectedCompletionDate"
               value={formData.expectedCompletionDate}
               onChange={handleChange}
+              required
             />
           </label>
 
           <div className="radio-group full-width">
-            <p className="radio-label">Project Loan Awail :</p>
+            <p className="radio-label">Project Loan Awail:<span className="required-asterisk">*</span></p>
             <label>
               <input
                 type="radio"
@@ -561,190 +1869,962 @@ const BuilderVisitForm = () => {
             </label>
           </div>
           <label className="full-width">
-            Nearby Similar Projects:
+            Nearby Similar Projects:<span className="required-asterisk">*</span>
             <textarea
               placeholder="Enter Nearby Other Projects"
               name="nearbyProjects"
               value={formData.nearbyProjects}
               onChange={handleChange}
+              required
             />
           </label>
 
-          <label>
-            Enquiry Type:
-            <select
-              name="enquiryType"
-              value={formData.enquiryType}
-              onChange={handleChange}
-            >
-              <option value="">Select</option>
-              <option>Salaried</option>
-              <option>Self-employed</option>
-              <option>Both</option>
-            </select>
-          </label>
+          <div className="radio-group full-width">
+            <p className="radio-label">Enquiry Type:<span className="required-asterisk">*</span></p>
+            {["Salaried", "Self-employed", "Both"].map(
+              (type) => (
+                <label key={type}>
+                  <input
+                    type="radio"
+                    name="enquiryType"
+                    value={type}
+                    checked={formData.enquiryType === type}
+                    onChange={handleChange}
+                  />
+                  {type}
+                </label>
+              )
+            )}
+          </div>
 
           <label>
-            Units Allocated for Sale
+            Units Available for Sale:<span className="required-asterisk">*</span>
             <input
               placeholder="Enter Units to be sold by us"
               type="string"
               name="unitsForSale"
               value={formData.unitsForSale}
               onChange={handleChange}
+              required
             />
           </label>
 
-          <label>
-            Time Limit for Sale Months (Group Project):
-            <input
-              placeholder="Enter Time Limit for Sale (Months)"
-              type="number"
-              name="timeLimitMonths"
-              value={formData.timeLimitMonths}
-              onChange={handleChange}
-            />
-          </label>
+          <div className="full-width" style={{ marginBottom: "20px" }}>
+            <label style={{ display: "block", marginBottom: "8px", fontWeight: "500", fontSize: "14px" }}>
+              USP's:
+            </label>
+            <div ref={uspDropdownRef} style={{ position: "relative" }}>
+              {/* Dropdown Button */}
+              <div
+                onClick={() => setUspDropdownOpen(!uspDropdownOpen)}
+                style={{
+                  border: uspDropdownOpen ? "2px solid #1976d2" : "1px solid #d0d0d0",
+                  borderRadius: "8px",
+                  padding: "12px 16px",
+                  backgroundColor: "#fff",
+                  cursor: "pointer",
+                  minHeight: "48px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  transition: "all 0.2s ease",
+                  boxShadow: uspDropdownOpen ? "0 0 0 3px rgba(25, 118, 210, 0.1)" : "none",
+                }}
+                onMouseEnter={(e) => {
+                  if (!uspDropdownOpen) {
+                    e.currentTarget.style.borderColor = "#999";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!uspDropdownOpen) {
+                    e.currentTarget.style.borderColor = "#d0d0d0";
+                  }
+                }}
+              >
+                <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                  {formData.usps && formData.usps.length > 0 ? (
+                    <>
+                      {formData.usps.map((usp, idx) => (
+                        <span
+                          key={idx}
+                          style={{
+                            backgroundColor: "#1976d2",
+                            color: "white",
+                            padding: "4px 12px",
+                            borderRadius: "16px",
+                            fontSize: "13px",
+                            fontWeight: "500",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            boxShadow: "0 2px 4px rgba(25, 118, 210, 0.2)",
+                          }}
+                        >
+                          {usp}
+                          <span
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setFormData((prev) => ({
+                                ...prev,
+                                usps: prev.usps.filter((u) => u !== usp),
+                              }));
+                            }}
+                            style={{
+                              cursor: "pointer",
+                              fontSize: "16px",
+                              fontWeight: "bold",
+                              opacity: 0.8,
+                              transition: "opacity 0.2s",
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+                            onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.8")}
+                          >
+                            ×
+                          </span>
+                        </span>
+                      ))}
+                      <span style={{ color: "#666", fontSize: "13px", marginLeft: "4px" }}>
+                        ({formData.usps.length} selected)
+                      </span>
+                    </>
+                  ) : (
+                    <span style={{ color: "#999", fontSize: "14px" }}>
+                      Click to select USP's...
+                    </span>
+                  )}
+                </div>
+                <div style={{ 
+                  marginLeft: "12px", 
+                  fontSize: "18px",
+                  color: uspDropdownOpen ? "#1976d2" : "#666",
+                  transition: "all 0.2s ease",
+                  transform: uspDropdownOpen ? "rotate(180deg)" : "rotate(0deg)",
+                }}>
+                  ▼
+                </div>
+              </div>
 
+              {/* Dropdown Menu */}
+              {uspDropdownOpen && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 8px)",
+                    left: 0,
+                    right: 0,
+                    border: "1px solid #e0e0e0",
+                    borderRadius: "8px",
+                    backgroundColor: "#fff",
+                    boxShadow: "0 8px 24px rgba(0, 0, 0, 0.12), 0 4px 8px rgba(0, 0, 0, 0.08)",
+                    maxHeight: "320px",
+                    overflowY: "auto",
+                    zIndex: 1000,
+                    animation: "slideDown 0.2s ease",
+                  }}
+                >
+                  {/* Header */}
+                  <div style={{
+                    padding: "12px 16px",
+                    borderBottom: "1px solid #e0e0e0",
+                    backgroundColor: "#f8f9fa",
+                    fontWeight: "600",
+                    fontSize: "14px",
+                    color: "#333",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}>
+                    <span>Select USP's</span>
+                    {formData.usps && formData.usps.length > 0 && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setFormData((prev) => ({ ...prev, usps: [] }));
+                        }}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#d32f2f",
+                          fontSize: "12px",
+                          cursor: "pointer",
+                          fontWeight: "500",
+                          padding: "4px 8px",
+                          borderRadius: "4px",
+                          transition: "background-color 0.2s",
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#ffebee")}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                      >
+                        Clear All
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Options */}
+                  <div style={{ padding: "4px 0" }}>
+                    {[
+                      "DGU Sound Proof",
+                      "Italian marble",
+                      "360 open view",
+                      "Heat pump",
+                      "Central AC",
+                      "2 road corner",
+                      "3 road corner",
+                      "Pure residential",
+                      "Nr.Jain Derasar",
+                      "No vehicle zone at ground floor",
+                      "VRV System",
+                    ].map((usp, index) => {
+                      const isChecked = formData.usps?.includes(usp) || false;
+                      return (
+                        <label
+                          key={usp}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            padding: "12px 16px",
+                            cursor: "pointer",
+                            transition: "background-color 0.15s ease",
+                            backgroundColor: isChecked ? "#e3f2fd" : "transparent",
+                            borderLeft: isChecked ? "3px solid #1976d2" : "3px solid transparent",
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isChecked) {
+                              e.currentTarget.style.backgroundColor = "#f5f5f5";
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isChecked) {
+                              e.currentTarget.style.backgroundColor = "transparent";
+                            }
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            value={usp}
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setFormData((prev) => {
+                                const currentUsps = prev.usps || [];
+                                if (e.target.checked) {
+                                  return { ...prev, usps: [...currentUsps, value] };
+                                } else {
+                                  return {
+                                    ...prev,
+                                    usps: currentUsps.filter((u) => u !== value),
+                                  };
+                                }
+                              });
+                            }}
+                            style={{
+                              marginRight: "12px",
+                              width: "18px",
+                              height: "18px",
+                              cursor: "pointer",
+                              accentColor: "#1976d2",
+                            }}
+                          />
+                          <span style={{
+                            fontSize: "14px",
+                            color: isChecked ? "#1976d2" : "#333",
+                            fontWeight: isChecked ? "500" : "400",
+                          }}>
+                            {usp}
+                          </span>
+                          {isChecked && (
+                            <span style={{
+                              marginLeft: "auto",
+                              color: "#1976d2",
+                              fontSize: "16px",
+                              fontWeight: "bold",
+                            }}>
+                              ✓
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+            <style>
+              {`
+                @keyframes slideDown {
+                  from {
+                    opacity: 0;
+                    transform: translateY(-10px);
+                  }
+                  to {
+                    opacity: 1;
+                    transform: translateY(0);
+                  }
+                }
+              `}
+            </style>
+          </div>
+          
           <label className="full-width">
-            Remark:
+            Remark:<span className="required-asterisk">*</span>
             <textarea
               name="remark"
               value={formData.remark}
               onChange={handleChange}
               placeholder="Any extra comments or notes"
+              required
             />
           </label>
+          
+          {/* Total Amenities Field */}
+          <label>
+            Total Amenities:<span className="required-asterisk">*</span>
+            <input
+              type="number"
+              name="totalAmenities"
+              value={formData.totalAmenities}
+              onChange={handleChange}
+              placeholder="Enter total amenities"
+              min="0"
+              required
+              style={{
+                padding: "10px",
+                fontSize: "14px",
+                borderRadius: "6px",
+                border: "1px solid #d0d0d0",
+              }}
+            />
+          </label>
+          
+          {/* Alloted Car Parking Field */}
+          <label>
+            Alloted Car Parking:
+            <select
+              name="allotedCarParking"
+              value={formData.allotedCarParking}
+              onChange={handleChange}
+              style={{
+                padding: "10px",
+                fontSize: "14px",
+                borderRadius: "6px",
+                border: "1px solid #d0d0d0",
+                backgroundColor: "#fff",
+                cursor: "pointer",
+              }}
+            >
+              <option value="">Select parking</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+            </select>
+          </label>
+          
           <label className="full-width">
-            Payout (Group Project):
+            Payout (Group Project):<span className="required-asterisk">*</span>
             <input
               type="text"
               name="payout"
               value={formData.payout}
               onChange={handleChange}
               placeholder="Enter payout details"
+              required
             />
           </label>
 
-          <button type="submit" className="submit-btn">
-            {editingId ? "Update Form" : "Submit Form"}
+          <label className="full-width">
+            Sai-Fakira Manager:<span className="required-asterisk">*</span>
+            <select
+              name="saiFakiraManager"
+              value={formData.saiFakiraManager}
+              onChange={handleChange}
+              required
+            >
+              <option value="">Select Manager</option>
+              <option>Dharmesh Bhavsar</option>
+              <option>Robins Kapadia</option>
+              <option>Vinay Mishra</option>
+              <option>Harsh Brahmbhatt</option>
+              <option>Niraj Gelot</option>
+              <option>Mehul Prajapati</option>
+            </select>
+          </label>
+
+          <button 
+            type="submit" 
+            className="submit-btn"
+            disabled={isSubmitting}
+            style={{
+              opacity: isSubmitting ? 0.6 : 1,
+              cursor: isSubmitting ? 'not-allowed' : 'pointer',
+              position: 'relative'
+            }}
+          >
+            {isSubmitting ? (
+              <>
+                <span style={{ marginRight: '8px' }}>⏳</span>
+                {editingId ? "Updating..." : "Submitting..."}
+              </>
+            ) : (
+              editingId ? "Update Form" : "Submit Form"
+            )}
           </button>
         </div>
       </form>
       <div className="excel-export-section">
         <button onClick={handleExportExcel} className="download-btn">
-          Export Excel
+          Export Excel (Level 2 Approved Only)
         </button>
       </div>
 
-      {visits.map((v) => (
-        <div key={v._id} className="visit-card">
-          <h3 className="card-title">{v.projectName}</h3>
+      <div className="view-toggle-container">
+        <div className="view-toggle">
+          <button 
+            type="button"
+            className={`view-toggle-btn ${!showAllCards ? 'active' : ''}`}
+            onClick={() => {
+              setShowAllCards(false);
+              sessionTokenRef.current = null;
+            }}
+          >
+            📋 Pending Approval
+          </button>
+          <button 
+            type="button"
+            className={`view-toggle-btn ${showAllCards ? 'active' : ''}`}
+            onClick={() => {
+              if (showAllCards) {
+                setShowAllCards(false);
+                sessionTokenRef.current = null;
+                return;
+              }
+              setPasswordInput("");
+              setPasswordError("");
+              setShowPasswordModal(true);
+            }}
+          >
+            🔒 All Properties
+          </button>
+        </div>
+      </div>
 
-          <div className="card-section">
-            <p>
-              <strong>Builder:</strong> {v.builderName}
+      {/* Password Gate Modal */}
+      {showPasswordModal && (
+        <div style={{
+          position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.5)",
+          display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999
+        }}>
+          <div style={{
+            background: "#fff", borderRadius: "12px", padding: "32px 28px",
+            width: "100%", maxWidth: "380px", boxShadow: "0 8px 32px rgba(0,0,0,0.18)"
+          }}>
+            <h3 style={{ margin: "0 0 6px", color: "#0369a1", fontSize: "18px" }}>🔒 Enter Approval Password</h3>
+            <p style={{ margin: "0 0 20px", fontSize: "13px", color: "#64748b" }}>
+              Use your Level 2 approval password to access all properties.
             </p>
-            <p style={{backgroundColor:"yellow"}}>
-              <strong>Group:</strong> {v.groupName}
+            <input
+              type="password"
+              autoFocus
+              placeholder="Enter password"
+              value={passwordInput}
+              onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(""); }}
+              onKeyDown={(e) => e.key === "Enter" && handleVerifyPassword()}
+              style={{
+                width: "100%", padding: "10px 12px", borderRadius: "8px",
+                border: passwordError ? "1.5px solid #dc2626" : "1.5px solid #bae6fd",
+                fontSize: "15px", outline: "none", boxSizing: "border-box", marginBottom: "8px"
+              }}
+            />
+            {passwordError && (
+              <p style={{ color: "#dc2626", fontSize: "13px", margin: "0 0 12px" }}>❌ {passwordError}</p>
+            )}
+            <div style={{ display: "flex", gap: "10px", marginTop: "8px" }}>
+              <button
+                onClick={() => { setShowPasswordModal(false); setPasswordInput(""); setPasswordError(""); }}
+                style={{
+                  flex: 1, padding: "10px", borderRadius: "8px", border: "1.5px solid #e2e8f0",
+                  background: "#f8fafc", cursor: "pointer", fontWeight: "600", fontSize: "14px"
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleVerifyPassword}
+                disabled={passwordVerifying}
+                style={{
+                  flex: 1, padding: "10px", borderRadius: "8px", border: "none",
+                  background: passwordVerifying ? "#93c5fd" : "#0369a1",
+                  color: "#fff", cursor: passwordVerifying ? "not-allowed" : "pointer",
+                  fontWeight: "600", fontSize: "14px"
+                }}
+              >
+                {passwordVerifying ? "Verifying..." : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Filter Section */}
+      <div className="filter-section">
+        <h3 className="filter-title">🔍 Search Properties</h3>
+        <div className="filter-inputs">
+          <div className="filter-input-group">
+            <label htmlFor="filterProject">Project Name:</label>
+            <input
+              id="filterProject"
+              type="text"
+              placeholder="Search by Project Name..."
+              value={filterProjectName}
+              onChange={(e) => setFilterProjectName(e.target.value)}
+              className="filter-input"
+            />
+          </div>
+          <div className="filter-input-group">
+            <label htmlFor="filterGroup">Group Name:</label>
+            <input
+              id="filterGroup"
+              type="text"
+              placeholder="Search by Group Name..."
+              value={filterGroupName}
+              onChange={(e) => setFilterGroupName(e.target.value)}
+              className="filter-input"
+            />
+          </div>
+          <div className="filter-input-group">
+            <label htmlFor="filterApproval">Approval Status:</label>
+            <select
+              id="filterApproval"
+              value={filterApprovalStatus}
+              onChange={(e) => setFilterApprovalStatus(e.target.value)}
+              className="filter-input"
+            >
+              <option value="">All</option>
+              <option value="l1-pending">L1 Pending</option>
+              <option value="l2-pending">L2 Pending</option>
+            </select>
+          </div>
+          <div className="filter-input-group">
+            <label htmlFor="filterManager">Sai-Fakira Manager:</label>
+            <select
+              id="filterManager"
+              value={filterManager}
+              onChange={(e) => setFilterManager(e.target.value)}
+              className="filter-input"
+            >
+              <option value="">All Managers</option>
+              <option value="Dharmesh Bhavsar">Dharmesh Bhavsar</option>
+              <option value="Robins Kapadia">Robins Kapadia</option>
+              <option value="Vinay Mishra">Vinay Mishra</option>
+              <option value="Harsh Brahmbhatt">Harsh Brahmbhatt</option>
+              <option value="Niraj Gelot">Niraj Gelot</option>
+              <option value="Mehul Prajapati">Mehul Prajapati</option>
+            </select>
+          </div>
+          <div className="filter-input-group">
+            <label htmlFor="filterDate">Submitted Date:</label>
+            <input
+              id="filterDate"
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              className="filter-input"
+            />
+          </div>
+          {(filterProjectName || filterGroupName || filterApprovalStatus || filterManager || filterDate) && (
+            <button 
+              onClick={() => {
+                setFilterProjectName("");
+                setFilterGroupName("");
+                setFilterApprovalStatus("");
+                setFilterManager("");
+                setFilterDate("");
+              }}
+              className="clear-filters-btn"
+            >
+              Clear Filters
+            </button>
+          )}
+        </div>
+      </div>
+
+      {(() => {
+        // Calculate filtered visits
+        const filteredVisits = visits
+          .filter((v) => showAllCards || v.approval?.level2?.status !== "Approved") // Show all if toggled, otherwise hide L2 approved
+          .filter((v) => {
+            // Filter by project name
+            const matchesProject = filterProjectName
+              ? v.projectName?.toLowerCase().includes(filterProjectName.toLowerCase())
+              : true;
+            
+            // Filter by group name
+            const matchesGroup = filterGroupName
+              ? v.groupName?.toLowerCase().includes(filterGroupName.toLowerCase())
+              : true;
+
+            // Filter by approval status
+            let matchesApproval = true;
+            if (filterApprovalStatus) {
+              const l1 = v.approval?.level1?.status || "Pending";
+              const l2 = v.approval?.level2?.status || "Pending";
+              switch (filterApprovalStatus) {
+                case "l1-pending":
+                  // L1 not yet approved
+                  matchesApproval = l1 === "Pending";
+                  break;
+                case "l2-pending":
+                  // L1 must be Approved AND L2 still Pending
+                  matchesApproval = l1 === "Approved" && l2 === "Pending";
+                  break;
+                default:
+                  matchesApproval = true;
+              }
+            }
+            
+            // Filter by manager
+            const matchesManager = filterManager
+              ? v.saiFakiraManager === filterManager
+              : true;
+
+            // Filter by date (submitted date)
+            let matchesDate = true;
+            if (filterDate) {
+              const submittedDate = v.submittedAt ? new Date(v.submittedAt).toISOString().split("T")[0] : null;
+              matchesDate = submittedDate === filterDate;
+            }
+
+            return matchesProject && matchesGroup && matchesApproval && matchesManager && matchesDate;
+          });
+
+        // Check if any filters are active
+        const hasActiveFilters = filterProjectName || filterGroupName || filterApprovalStatus || filterManager || filterDate;
+
+        return (
+          <>
+            {/* Results Counter - Only show when filters are active or showAllCards is enabled */}
+            {(hasActiveFilters || showAllCards) && (
+              <div style={{
+                textAlign: 'center',
+                margin: '20px 0',
+                padding: '10px',
+                backgroundColor: '#f0f8ff',
+                border: '1px solid #007bff',
+                borderRadius: '6px',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                color: '#007bff'
+              }}>
+                📊 {filteredVisits.length} result{filteredVisits.length !== 1 ? 's' : ''} found
+              </div>
+            )}
+
+            {/* Render filtered visits */}
+            {filteredVisits.map((v) => (
+        <div key={v._id} className={`visit-card ${v.approval?.level2?.status === "Approved" ? "approved-card" : ""}`}>
+          <h3 className="card-title">
+            {v.projectName}
+            {v.approval?.level2?.status === "Approved" && (
+              <span className="approved-label">APPROVED</span>
+            )}
+          </h3>
+
+          {/* Header Info - Key Details */}
+          <div className="card-section universal-responsive-grid" style={{marginBottom: "12px"}}>
+            <p style={{backgroundColor:"yellow", padding: "4px 8px", borderRadius: "4px", margin: "2px 0", fontSize: "15px"}}>
+              <strong>Sai-Fakira Manager:</strong> {v.saiFakiraManager}
             </p>
-            <p>
+            <p style={{backgroundColor:"yellow", padding: "4px 8px", borderRadius: "4px", margin: "2px 0", fontSize: "15px"}}>
+              <strong>Group Name:</strong> {v.groupName}
+            </p>
+            <p style={{margin: "2px 0", fontSize: "14px"}}>
+              <strong>Developer Name:</strong> {v.builderName}
+            </p>
+            <p style={{backgroundColor:"yellow", padding: "4px 8px", borderRadius: "4px", margin: "2px 0", fontSize: "15px"}}>
+              <strong>Developer Number:</strong> {v.builderNumber}
+            </p>
+            <p style={{margin: "2px 0", fontSize: "14px"}}>
               <strong>Location:</strong> {v.location}
             </p>
-            <p>
+            <p style={{margin: "2px 0", fontSize: "14px"}}>
               <strong>Development Type:</strong> {v.developmentType}
             </p>
           </div>
-          <div className="card-section">
-            {v.propertySizes?.map((p, i) => (
-              <div key={i} className="card-property">
-                <p>
-                  <strong>Property {i + 1}</strong>
-                </p>
-                {v.developmentType === "Residential" && <p style={{backgroundColor:"yellow"}}>Size : {p.size}</p>}
-                {v.developmentType === "Commercial" && <p style={{backgroundColor:"yellow"}}>Floor : {p.floor}</p>}
-                {v.developmentType === "Residential + Commercial" && (
+
+          {/* Contact Info */}
+          <div className="card-section universal-responsive-grid" style={{marginBottom: "12px", padding: "8px", backgroundColor: "#f8f9fa", borderRadius: "6px"}}>
+            <p style={{margin: "2px 0", fontSize: "14px"}}>
+              <strong>Office Person Name:</strong> {v.officePersonDetails}
+            </p>
+            <p style={{backgroundColor:"yellow", padding: "4px 8px", borderRadius: "4px", margin: "2px 0", fontSize: "15px"}}>
+              <strong>Office Person Contact:</strong> {v.officePersonNumber}
+            </p>
+            {v.executives && v.executives.length > 0 && (
+              <div style={{gridColumn: "1 / -1", marginTop: "6px"}}>
+                <strong style={{fontSize: "14px"}}>Executives:</strong>
+                <div style={{display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "4px"}}>
+                  {v.executives.map((exec, idx) => (
+                    <span key={idx} style={{backgroundColor:"lightblue", padding: "2px 6px", borderRadius: "12px", fontSize: "13px"}}>
+                      {exec.name} - {exec.number}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Property Details */}
+          <div style={{marginBottom: "12px"}}>
+            <div style={{
+              margin: "0 0 6px 0", 
+              color: "#333", 
+              fontSize: "16px", 
+              fontWeight: "bold",
+              borderBottom: "1px solid #007bff", 
+              paddingBottom: "2px",
+              width: "100%"
+            }}>
+              Property Details
+            </div>
+            <div className="property-cards-container">
+              {v.propertySizes?.map((p, i) => (
+                <div key={i} className="property-type-card" style={{
+                  backgroundColor: "#fff", 
+                  border: "1px solid #e0e0e0", 
+                  borderRadius: "6px", 
+                  padding: "12px",
+                  width: "100%",
+                  boxSizing: "border-box",
+                  overflow: "hidden"
+                }}>
+                  <div style={{margin: "0 0 8px 0", fontWeight: "bold", color: "#007bff", fontSize: "16px"}}>
+                    {v.developmentType === "Residential + Commercial"
+                      ? `Property ${i + 1} — ${p.type === "Commercial" || p.floor ? "🏢 Commercial" : "🏠 Residential"}`
+                      : `Property ${i + 1} (${p.type || v.developmentType})`}
+                  </div>
+                  
+                  <div className="property-metrics-grid">
+                    {v.developmentType === "Residential" && (
+                      <>
+                        <span style={{backgroundColor:"yellow", padding: "4px 6px", borderRadius: "4px", fontSize: "15px"}}>
+                          <strong>Size:</strong> {p.size}
+                        </span>
+                        {p.category && <span style={{backgroundColor:"yellow", padding: "4px 6px", borderRadius: "4px", fontSize: "15px"}}>
+                          <strong>Category:</strong> {p.category}
+                        </span>}
+                      </>
+                    )}
+                    {v.developmentType === "Commercial" && p.floor && 
+                      <span style={{backgroundColor:"yellow", padding: "4px 6px", borderRadius: "4px", fontSize: "15px"}}>
+                        <strong>Floor:</strong> {p.floor}
+                      </span>
+                    }
+                    {v.developmentType === "Residential + Commercial" && (
+                      <>
+                        {p.size && p.size !== "N/A" && <span style={{backgroundColor:"yellow", padding: "4px 6px", borderRadius: "4px", fontSize: "15px"}}>
+                          <strong>Size:</strong> {p.size}
+                        </span>}
+                        {p.category && p.category !== "N/A" && <span style={{backgroundColor:"yellow", padding: "4px 6px", borderRadius: "4px", fontSize: "15px"}}>
+                          <strong>Category:</strong> {p.category}
+                        </span>}
+                        {p.floor && <span style={{backgroundColor:"yellow", padding: "4px 6px", borderRadius: "4px", fontSize: "15px"}}>
+                          <strong>Floor:</strong> {p.floor}
+                        </span>}
+                      </>
+                    )}
+                    
+                    <span style={{backgroundColor:"yellow", padding: "4px 6px", borderRadius: "4px", fontSize: "15px"}}>
+                      <strong>SQ.FT:</strong> {p.sqft}
+                    </span>
+                    <span style={{backgroundColor:"yellow", padding: "4px 6px", borderRadius: "4px", fontSize: "15px"}}>
+                      <strong>SQ.YD:</strong> {p.sqyd}
+                    </span>
+                    <span style={{backgroundColor:"yellow", padding: "4px 6px", borderRadius: "4px", fontSize: "15px"}}>
+                      <strong>Basic Rate:</strong> {p.basicRate}
+                    </span>
+                    <span style={{backgroundColor:"yellow", padding: "4px 6px", borderRadius: "4px", fontSize: "15px"}}>
+                      <strong>Box Price:</strong> {p.boxPrice}
+                    </span>
+                    <span style={{padding: "4px 6px", fontSize: "14px"}}>
+                      <strong>PLC:</strong> {p.plc}
+                    </span>
+                    <span style={{padding: "4px 6px", fontSize: "14px"}}>
+                      <strong>FRC:</strong> {p.frc}
+                    </span>
+                    <span style={{padding: "4px 6px", fontSize: "14px"}}>
+                      <strong>SaleDeed:</strong> {p.selldedAmount}
+                    </span>
+                    <span style={{padding: "4px 6px", fontSize: "14px"}}>
+                      <strong>AEC/AUDA:</strong> {p.aecAuda}
+                    </span>
+                    <span style={{padding: "4px 6px", fontSize: "14px"}}>
+                      <strong>Runn Maintenance:</strong> {p.maintenance}
+                    </span>
+                    <span style={{padding: "4px 6px", fontSize: "14px"}}>
+                      <strong>Main Deposit:</strong> {p.maintenanceDeposit}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Clear Floor Height */}
+          {(v.clearFloorHeight || v.clearFloorHeightRetail || v.clearFloorHeightFlats || v.clearFloorHeightOffices) && (
+            <div className="card-section" style={{marginBottom: "12px", padding: "8px", backgroundColor: "#e3f2fd", borderRadius: "6px"}}>
+              <h4 style={{margin: "0 0 6px 0", fontSize: "14px", color: "#1976d2"}}>Clear Floor Height</h4>
+              <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "4px", fontSize: "14px"}}>
+                {v.developmentType === "Residential" && v.clearFloorHeight && (
+                  <span><strong>Height:</strong> {v.clearFloorHeight}</span>
+                )}
+                {(v.developmentType === "Residential + Commercial" || v.developmentType === "Commercial") && (
                   <>
-                    {p.size && <p style={{backgroundColor:"yellow"}}>Size : {p.size}</p>}
-                    {p.floor && <p style={{backgroundColor:"yellow"}}>Floor : {p.floor}</p>}
+                    {v.clearFloorHeightRetail && (
+                      <span><strong>Retail:</strong> {v.clearFloorHeightRetail}</span>
+                    )}
+                    {v.clearFloorHeightFlats && (
+                      <span><strong>Flats:</strong> {v.clearFloorHeightFlats}</span>
+                    )}
+                    {v.clearFloorHeightOffices && (
+                      <span><strong>Offices:</strong> {v.clearFloorHeightOffices}</span>
+                    )}
                   </>
                 )}
-                <p style={{backgroundColor:"yellow"}}>SQ.FT/Yard : {p.sqft}</p>
-                <p style={{backgroundColor:"yellow"}}>Box Price : {formatIndian(p.boxPrice)}</p>
-                <p>Approximate SaleDeed Amount : {p.selldedAmount}</p>
-                {/* stamp duty here add */}
-                <p>AEC / AUDA : {p.aecAuda}</p>
-                <p>Maintenance : {p.maintenance}</p>
-                <p>Down Payment : {formatIndian(p.downPayment)}</p>
               </div>
-            ))}
-          </div>
-          <div className="card-section2">
-            <p>
-              <strong>Project Loan Awail:</strong> {v.financingRequirements}
-            </p>
-            <p>
-              <strong>Gentry:</strong> {v.gentry}
-            </p>
-            <p style={{backgroundColor:"yellow"}}>
-              <strong>Payout(Group Project):</strong> {v.payout}
-            </p>
-            <p>
-              <strong>Total Units / Blocks:</strong> {v.totalUnitsBlocks}
-            </p>
-            <p>
-              <strong>Stage Of Construction:</strong> {v.stageOfConstruction}
-            </p>
-            <p>
-              <strong>Completion Date:</strong>{" "}
-              {v.expectedCompletionDate
-                ? new Date(v.expectedCompletionDate + "-01").toLocaleDateString(
-                    "en-GB",
-                    {
-                      month: "long",
-                      year: "numeric",
-                    }
-                  )
-                : ""}
-            </p>
-
-            <p>
-              <strong>Units for Sale: </strong> {v.unitsForSale}
-            </p>
-            <p>
-              <strong>Time Limit for Sale (Months):</strong> {v.timeLimitMonths}
-            </p>
-            <p style={{backgroundColor:"yellow"}}>
-              <strong>Remark:</strong>
-              {v.remark}
-            </p>
-          </div>
-          <p style={{ fontSize: "20px" }}>
-            <strong>Status:</strong>{" "}
-            <span
-              className={`status ${
-                v.approvalStatus === "Approved"
-                  ? "approved"
-                  : v.approvalStatus === "Rejected"
-                  ? "rejected"
-                  : "pending"
-              }`}
-            >
-              {v.approvalStatus}
+            </div>
+          )}
+          
+          {/* Project Info */}
+          <div className="card-section" style={{display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "6px", marginBottom: "12px", fontSize: "14px"}}>
+            <span><strong>Project Loan:</strong> {v.financingRequirements}</span>
+            <span><strong>Community:</strong> {v.gentry}</span>
+            <span style={{backgroundColor:"yellow", padding: "2px 4px", borderRadius: "3px", fontSize: "15px"}}>
+              <strong>Payout:</strong> {v.payout}
             </span>
-          </p>
+            <span><strong>Total Units:</strong> {v.totalUnitsBlocks}</span>
+            <span style={{backgroundColor:"yellow", padding: "2px 4px", borderRadius: "3px", fontSize: "15px"}}>
+              <strong>Total Blocks:</strong> {v.totalBlocks}
+            </span>
+            <span><strong>Construction Stage:</strong> {v.stageOfConstruction}</span>
+            {v.areaType && (
+              <span style={{backgroundColor:"lightblue", padding: "2px 4px", borderRadius: "3px", fontSize: "15px"}}>
+                <strong>Area Type:</strong> {v.areaType}
+              </span>
+            )}
+            <span><strong>Completion:</strong> {v.expectedCompletionDate
+              ? new Date(v.expectedCompletionDate + "-01").toLocaleDateString("en-GB", {
+                  month: "long",
+                  year: "numeric",
+                })
+              : ""}
+            </span>
+            <span><strong>Units for Sale:</strong> {v.unitsForSale}</span>
+            {v.totalAmenities && <span><strong>Amenities:</strong> {v.totalAmenities}</span>}
+            {v.allotedCarParking && <span><strong>Car Parking:</strong> {v.allotedCarParking}</span>}
+          </div>
+
+          {/* USPs */}
+          {v.usps && v.usps.length > 0 && (
+            <div style={{marginBottom: "12px", padding: "8px", backgroundColor: "#e3f2fd", borderRadius: "6px"}}>
+              <p style={{margin: "0 0 6px 0", fontSize: "14px", fontWeight: "bold", color: "#1976d2"}}>USP's:</p>
+              <div style={{display: "flex", flexWrap: "wrap", gap: "4px"}}>
+                {v.usps.map((usp, idx) => (
+                  <span key={idx} style={{
+                    backgroundColor: "#2196f3",
+                    color: "white",
+                    padding: "2px 8px",
+                    borderRadius: "12px",
+                    fontSize: "13px",
+                    fontWeight: "500"
+                  }}>
+                    {usp}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Remark */}
+          <div style={{marginBottom: "12px", padding: "8px", backgroundColor: "yellow", borderRadius: "6px"}}>
+            <p style={{margin: "0", fontSize: "14px"}}>
+              <strong>Remark:</strong> {v.remark}
+            </p>
+          </div>
+          
+          {/* Submission Date */}
+          <div style={{ 
+            fontSize: "13px", 
+            marginBottom: "12px", 
+            padding: "6px 8px", 
+            backgroundColor: "#f0f8ff", 
+            borderRadius: "4px",
+            borderLeft: "3px solid #007bff"
+          }}>
+            <span style={{ color: "#333" }}>
+              <strong>📅 Submitted:</strong> {formatSubmissionDateTime(v.submittedAt)}
+            </span>
+          </div>
+          
+          {/* Approval Status */}
+          <div className="universal-responsive-grid" style={{ fontSize: "14px", marginBottom: "12px" }}>
+            <div>
+              <strong>Level 1:</strong>{" "}
+              <span className={`status ${
+                v.approval?.level1?.status === "Approved" ? "approved" :
+                v.approval?.level1?.status === "Rejected" ? "rejected" : "pending"
+              }`}>
+                {v.approval?.level1?.status || "Pending"}
+              </span>
+              {v.approval?.level1?.status === "Rejected" && v.approval?.level1?.comment && (
+                <div style={{fontSize: "11px", color: "#666", marginTop: "2px"}}>
+                  Remarks: "{v.approval.level1.comment}"
+                </div>
+              )}
+            </div>
+            <div>
+              <strong>Level 2:</strong>{" "}
+              <span className={`status ${
+                v.approval?.level2?.status === "Approved" ? "approved" :
+                v.approval?.level2?.status === "Rejected" ? "rejected" : "pending"
+              }`}>
+                {v.approval?.level2?.status || "Pending"}
+              </span>
+              {v.approval?.level2?.status === "Rejected" && v.approval?.level2?.comment && (
+                <div style={{fontSize: "11px", color: "#666", marginTop: "2px"}}>
+                  Remarks: "{v.approval.level2.comment}"
+                </div>
+              )}
+            </div>
+          </div>
 
           <div className="card-buttons">
-            {v.approvalStatus === "Pending" && (
+            {/* If Level 1 not approved -> show L1 controls */}
+            {v.approval?.level1?.status !== "Approved" && (
               <>
-                <button onClick={() => handleApprove(v._id)}>Approve</button>
-                <button onClick={() => handleReject(v._id)}>Reject</button>
+                <button onClick={() => handleApprove(v._id, 1)}>Approve L1</button>
+                <button onClick={() => handleRejectWithRemarks(v._id, 1)}>Reject L1</button>
                 <button onClick={() => handleEdit(v)}>Edit</button>
               </>
             )}
+
+            {/* If Level1 approved but Level2 not approved -> show L2 controls */}
+            {v.approval?.level1?.status === "Approved" &&
+              v.approval?.level2?.status !== "Approved" && (
+                <>
+                  <button onClick={() => handleApprove(v._id, 2)}>Approve L2</button>
+                  <button onClick={() => handleRejectWithRemarks(v._id, 2)}>Reject L2</button>
+                  <button onClick={() => handleEdit(v)}>Edit</button>
+                </>
+              )}
           </div>
         </div>
       ))}
+            </>
+          );
+        })()}
     </div>
   );
 };

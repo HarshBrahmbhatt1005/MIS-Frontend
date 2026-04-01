@@ -41,18 +41,30 @@ body {
 
 /* Labels */
 form label {
-  display: block;
-  margin-bottom: 6px;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 12px;
   font-weight: 500;
   font-size: 0.95rem;
   color: #333;
+  position: relative;
+  gap: 6px;
+}
+
+/* Mandatory asterisk */
+.required-asterisk {
+  color: #e53e3e;
+  margin-left: 4px;
+  font-weight: 700;
+  font-size: 1.1rem;
 }
 
 /* Inputs & dropdowns */
 form input,
 form select,
 form textarea {
-  width: 90%;
+  width: 100%;
+  box-sizing: border-box;
   padding: 12px 14px;
   border: 1px solid #d1c4e9;
   border-radius: 10px;
@@ -93,6 +105,32 @@ form textarea:focus {
   flex-wrap: wrap;
   gap: 1rem;
   margin-top: 1rem;
+}
+
+.approved-badge {
+  background-color: #ecfdf5;
+  color: #047857;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+  border: 1px solid #d1fae5;
+  vertical-align: middle;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.approved-badge::before {
+  content: "";
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #10b981;
 }
 
 .visit-card {
@@ -192,8 +230,16 @@ form textarea:focus {
   margin: 5px;
 }
 
+.radio-label .required-asterisk {
+  color: #e53e3e;
+  margin-left: 4px;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
 .radio-group label {
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 6px;
   font-size: 0.95rem;
@@ -206,6 +252,7 @@ form textarea:focus {
   transform: scale(1.2);
   cursor: pointer;
 }
+
 .visit-card {
   background: #fff;
   border-radius: 12px;
@@ -213,10 +260,21 @@ form textarea:focus {
   margin: 12px 0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   transition: 0.25s ease;
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .visit-card:hover {
   transform: translateY(-3px);
+}
+
+/* Mobile responsive adjustments for visit cards */
+@media (max-width: 768px) {
+  .visit-card {
+    padding: 12px 16px;
+    margin: 8px 0;
+  }
 }
 
 .card-title {
@@ -227,14 +285,30 @@ form textarea:focus {
   margin-top: 5px;
   display: flex;
   justify-content: center;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Mobile responsive title */
+@media (max-width: 768px) {
+  .card-title {
+    font-size: 1.6rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .card-title {
+    font-size: 1.4rem;
+  }
 }
 
 .card-section {
   margin-bottom: 10px;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  /* gap: 8px 16px;  */
+  /* gap: 8px 16px; */
 }
+
 .card-section2 {
   margin-bottom: 10px;
   display: grid;
@@ -305,6 +379,7 @@ form textarea:focus {
   width: 16px; /* normal size iPhone/Safari me */
   height: 16px; /* normal size */
   -webkit-appearance: radio; /* Safari ke liye */
+  appearance: radio;
   accent-color: #8c1843; /* optional color change */
 }
 
@@ -322,5 +397,380 @@ form textarea:focus {
 @media (max-width: 768px) {
   .add-btn {
     width: 60%;
+  }
+}
+
+/* Rejection remarks styling */
+.rejection-remarks {
+  background-color: #ffebee;
+  border-left: 4px solid #f44336;
+  padding: 12px 16px;
+  margin: 10px 0;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(244, 67, 54, 0.1);
+}
+
+.rejection-remarks strong {
+  color: #c62828;
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.95rem;
+}
+
+.rejection-remarks p {
+  color: #424242;
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  font-style: italic;
+}
+
+/* Inline rejection remarks styling */
+.inline-remarks {
+  color: #d32f2f;
+  font-style: italic;
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin-left: 8px;
+}
+
+/* Side by side layout for Size and Category */
+.size-category-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+  margin-bottom: 10px;
+}
+
+@media (max-width: 600px) {
+  .size-category-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}
+
+
+/* ==================== FILTER SECTION ==================== */
+.filter-section {
+  background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+  padding: 25px 30px;
+  margin: 30px 0;
+  border-radius: 16px;
+  border: 2px solid #e2e8f0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.filter-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #2d3748;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.filter-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+}
+
+.filter-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.filter-input-group label {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #4a5568;
+}
+
+.filter-input {
+  padding: 12px 16px;
+  border: 2px solid #cbd5e0;
+  border-radius: 10px;
+  font-size: 1rem;
+  outline: none;
+  transition: all 0.3s ease;
+  background: #ffffff;
+  height: 48px;
+  box-sizing: border-box;
+  appearance: auto;
+  -webkit-appearance: auto;
+}
+
+.filter-input:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.filter-input::placeholder {
+  color: #a0aec0;
+}
+
+.clear-filters-btn {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(245, 101, 101, 0.3);
+  white-space: nowrap;
+}
+
+.clear-filters-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(245, 101, 101, 0.4);
+}
+
+.clear-filters-btn:active {
+  transform: translateY(0);
+}
+
+/* Responsive filters */
+@media (max-width: 768px) {
+  .filter-input-group {
+    flex: 1 1 100%;
+  }
+
+  .clear-filters-btn {
+    width: 100%;
+  }
+  
+  .filter-section {
+    padding: 20px;
+  }
+}
+
+/* 2 cards side by side on screens wider than 1440px */
+@media (min-width: 1441px) {
+  .visit-cards {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .visit-card {
+    flex: unset;
+  }
+}
+
+/* ==================== RESPONSIVE REAL ESTATE CARDS ==================== */
+.property-cards-container {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+
+/* Tablet view - stack cards vertically */
+@media (max-width: 768px) {
+  .property-cards-container {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Individual property card styling */
+.property-cards-container > div,
+.property-type-card {
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow: hidden;
+  min-width: 0; /* Prevents grid blowout */
+}
+
+/* Property metrics grid - 2 columns on desktop */
+.property-metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  font-size: 14px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Property metrics spans - ensure they don't overflow */
+.property-metrics-grid span {
+  box-sizing: border-box;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+/* Property metrics - single column on mobile */
+@media (max-width: 480px) {
+  .property-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .property-metrics-grid span {
+    width: 100%;
+  }
+}
+
+/* Universal responsive grid for other sections */
+.universal-responsive-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+@media (max-width: 768px) {
+  .universal-responsive-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ==================== MOBILE RESPONSIVE ENHANCEMENTS ==================== */
+
+/* Ensure all content within visit cards stays within bounds */
+@media (max-width: 768px) {
+  .visit-card * {
+    box-sizing: border-box;
+    max-width: 100%;
+  }
+  
+  /* Property card title responsive */
+  .visit-card > div[style*="margin: 0 0 6px 0"] {
+    font-size: 14px !important;
+  }
+  
+  /* Ensure property type cards don't overflow */
+  .property-type-card {
+    padding: 10px !important;
+  }
+  
+  /* Property title within cards */
+  .property-type-card > div[style*="fontWeight: bold"] {
+    font-size: 14px !important;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+}
+
+/* Extra small devices (phones, less than 480px) */
+@media (max-width: 480px) {
+  /* Reduce padding on property cards */
+  .property-type-card {
+    padding: 8px !important;
+  }
+  
+  /* Smaller font sizes for better fit */
+  .property-metrics-grid {
+    font-size: 13px;
+  }
+  
+  /* Ensure yellow highlighted spans don't overflow */
+  .property-metrics-grid span[style*="backgroundColor:yellow"],
+  .property-metrics-grid span[style*="background-color: yellow"] {
+    font-size: 13px !important;
+    padding: 3px 5px !important;
+  }
+}
+/* View Toggle Section */
+.view-toggle-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 25px;
+  width: 100%;
+}
+
+.view-toggle {
+  display: flex;
+  background: #edf2f7;
+  padding: 6px;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+  width: fit-content;
+}
+
+.view-toggle-btn {
+  padding: 12px 28px;
+  border: none;
+  background: transparent;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #4a5568;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.view-toggle-btn.active {
+  background: #ffffff;
+  color: #5e35b1;
+  box-shadow: 0 4px 12px rgba(94, 53, 177, 0.15);
+}
+
+.view-toggle-btn:not(.active):hover {
+  background: rgba(255, 255, 255, 0.5);
+  color: #2d3748;
+}
+
+@media (max-width: 480px) {
+  .view-toggle {
+    width: 100%;
+  }
+  .view-toggle-btn {
+    flex: 1;
+    padding: 10px 15px;
+    font-size: 0.9rem;
+    justify-content: center;
+  }
+}
+/* Approved Card Styling */
+.visit-card.approved-card {
+  border-left: 6px solid #4caf50;
+  background-color: #f1f8f3;
+}
+
+.approved-label {
+  display: inline-flex;
+  align-items: center;
+  background-color: #f0fdf4;
+  color: #166534;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 12px;
+  border: 1px solid #dcfce7;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  vertical-align: middle;
+  cursor: default;
+}
+
+@keyframes badgePop {
+  0% { transform: scale(0.5); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@media (max-width: 480px) {
+  .approved-badge {
+    margin-left: 0;
+    margin-top: 5px;
+    font-size: 0.8rem;
+    padding: 2px 8px;
+  }
+  .card-title {
+    flex-direction: column;
+    align-items: center;
   }
 }
